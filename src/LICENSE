@@ -1,0 +1,64 @@
+MIT License
+
+Copyright (c) 2026 Petr / chiptron.cz
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+A KIND REQUEST (not a legal condition)
+
+The MIT license above gives you full freedom, including commercial use.
+Beyond what the license requires, I would be genuinely glad if you kept the
+"chiptron.cz" credit visible on the settings screen — in the same size and
+color as in the original.
+
+It costs you nothing and it means a lot to me. But it is a request, not an
+obligation. If you decide otherwise, the license still applies in full.
+
+If you build something interesting on top of this, I would love to hear about
+it: https://chiptron.cz
+
+---
+
+THIRD-PARTY COMPONENTS
+
+This project includes the QRCode library by Richard Moore (ricmoo),
+licensed under the MIT License:
+https://github.com/ricmoo/QRCode
+
+Map data (src/EuMapData.h) is derived from:
+
+- Natural Earth (https://www.naturalearthdata.com/) - country borders, 1:10m.
+  Public domain. Obtained via the world-atlas TopoJSON redistribution
+  (https://github.com/topojson/world-atlas), which is ISC licensed.
+
+- GeoNames (https://www.geonames.org/) - city locations and population.
+  Licensed under Creative Commons Attribution 4.0 (CC BY 4.0):
+  https://creativecommons.org/licenses/by/4.0/
+  ATTRIBUTION REQUIRED: if you redistribute this project or a derivative,
+  you must credit GeoNames. The notice above satisfies this.
+
+Data sources used by this software have their own terms:
+- adsb.fi (https://adsb.fi/) - personal, non-commercial use only
+- ip-api.com (https://ip-api.com/)
+
+Please review their terms before commercial deployment. In particular,
+adsb.fi's free API is intended for personal use — commercial products
+should arrange appropriate data access.
