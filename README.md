@@ -86,7 +86,7 @@ Arduino IDE, **ESP32 core 3.x**, a knihovny z Library Manageru:
    místa pro aplikaci.
 4. Nahrajte a připojte se k WiFi síti `MeteoPlaneRadar` pro prvotní nastavení.
 
-Nebo stáhněte přibalený BIN soubor a nahrajte ho do desky na esp32flasher.chiptron.cz
+Nebo stáhněte přibalený BIN soubor a nahrajte ho do desky na https://esp32flasher.chiptron.cz
 
 ## Zdroje dat a API
 
