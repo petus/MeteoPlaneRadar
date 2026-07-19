@@ -102,9 +102,14 @@ Jen pro osobní, nekomerční použití — respektujte prosím podmínky poskyt
 ## Licence
 
 MIT (viz `src/LICENSE`). Kód smíte volně používat, upravovat i komerčně
-nasazovat - musíte si ale zařídit komerční využívání používaných API! Nad rámec licence budeme rádi, když na obrazovce nastavení ponecháte
-řádek **chiptron.cz** ve stejné velikosti a barvě jako v originále — je to
-prosba, ne podmínka.
+nasazovat - musíte si ale zařídit komerční 
+využívání používaných API! Nad rámec licence budeme rádi, když na obrazovce nastavení ponecháte
+řádek **chiptron.cz** ve stejné velikosti a barvě jako v originále — je to prosba, ne podmínka.
+
+## Inspirace 
+Tento projekt nevznikl z ničeho. Navazuje na dva existující:
+[MatixYo/ESP32-Plane-Radar](https://github.com/MatixYo/ESP32-Plane-Radar) - původní radar letadel a zdroj adsb.fi
+[Selbyl/ESP32-S30Touch-LCD-2.1_Plane-Radar](https://github.com/Selbyl/ESP32-S30Touch-LCD-2.1_Plane-Radar) - port na Waveshare 480×480
 
 ## Vývoj
 
