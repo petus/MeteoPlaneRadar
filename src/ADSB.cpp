@@ -87,7 +87,6 @@ bool ADSB_Fetch(double lat, double lon, float radiusKm) {
   HTTPClient http;
   http.setTimeout(10000);
   if (!http.begin(client, url)) { Serial.println("ADSB: begin failed"); return false; }
-  http.useHTTP10(true);   // required by the streaming parser
 
   // adsb.fi answers only to a couple of headers; grab the content length so we
   // can tell a genuinely complete body from a connection that dropped mid-way.
@@ -100,11 +99,14 @@ bool ADSB_Fetch(double lat, double lon, float radiusKm) {
 
   int declaredLen = http.getSize();   // -1 when the server does not declare it
 
-  // Parse into a SCRATCH document first. Only if it succeeds do we touch the
-  // list the screen reads from.
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, http.getStream());
+  // Pobieramy cały ciąg tekstowy JSON do pamięci RAM urządzenia.
+  // Zapobiega to przerwaniu pobierania ("IncompleteInput") w locie.
+  String payload = http.getString();
   http.end();
+
+  // Dynamiczne przydzielenie dokumentu w ArduinoJson 7
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, payload);
 
   // A truncated download shows up as IncompleteInput (the stream ended inside
   // the JSON). Any other error (EmptyInput, InvalidInput, NoMemory) is treated

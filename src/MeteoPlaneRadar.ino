@@ -43,10 +43,6 @@
 //    - Precip.:  Cesky hydrometeorologicky ustav (CHMU), https://opendata.chmi.cz
 //    - Location: ip-api.com (automatic detection by IP)
 //
-// Inspired
-// https://github.com/MatixYo/ESP32-Plane-Radar
-// https://github.com/Selbyl/ESP32-S30Touch-LCD-2.1_Plane-Radar
-//
 //  Licence: MIT (see the LICENSE file).
 // =============================================================================
 

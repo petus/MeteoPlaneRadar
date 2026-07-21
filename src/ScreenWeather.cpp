@@ -183,7 +183,7 @@ static bool rebuildCrops() {
 // Download frames + build crops (blocking). A message is shown meanwhile.
 static void loadAndBuild() {
   gfx->fillScreen(C_BLACK);
-  UI_TextCentered("Nacitam animaci...", LCD_HEIGHT / 2, C_WHITE, 2);
+  UI_TextCentered("LOADING ...", LCD_HEIGHT / 2, C_WHITE, 2);
   gfx->flush();
   int n = CHMU_FetchAnim(ANIM_FRAMES);
   if (n > 0) rebuildCrops(); else s_frameCount = 0;
@@ -224,7 +224,7 @@ static void drawOverlay() {
     int minAgo = (n - 1 - s_curFrame) * 5;
     char lbl[20];
     String hhmm = (s_frameCount > 0) ? CHMU_AnimTimeText(s_curFrame) : String("");
-    if (minAgo <= 0) snprintf(lbl, sizeof(lbl), "nyni  %s", hhmm.c_str());
+    if (minAgo <= 0) snprintf(lbl, sizeof(lbl), "teraz  %s", hhmm.c_str());
     else             snprintf(lbl, sizeof(lbl), "-%d min  %s", minAgo, hhmm.c_str());
     gfx->fillRect(CX - 70, 34, 140, 34, C_BLACK);   // backing
     int gap = 16, totalW = (n - 1) * gap, sx0 = CX - totalW / 2, dy = 44;
