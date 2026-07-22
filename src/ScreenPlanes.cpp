@@ -248,6 +248,7 @@ void ScreenPlanes_Draw() {
   int shown = 0;
   const Aircraft* list = ADSB_List();
   int n = ADSB_Count();
+  if (n > ADSB_MAX) n = ADSB_MAX; // Zabezpieczenie przed przepełnieniem tablicy dotykowej
   s_planeN = n;
 
   // Resolve the selection once per frame. If the aircraft has left the area it
