@@ -72,7 +72,8 @@ void EuBorder_Draw(ProjectFn project, uint16_t color,
 void EuBorder_DrawCities(ProjectFn project, int cx, int cy, int radius,
                          uint16_t dotColor, uint16_t textColor,
                          bool showFull, uint8_t maxTier,
-                         float lat0, float lat1, float lon0, float lon1) {
+                         float lat0, float lat1, float lon0, float lon1,
+                         uint8_t textSize) {
   long r2 = (long)radius * radius;
 
   for (int i = 0; i < EU_CITY_COUNT; i++) {
@@ -98,14 +99,14 @@ void EuBorder_DrawCities(ProjectFn project, int cx, int cy, int radius,
 
     // Full name or abbreviation.
     const char* label = showFull ? c.name : c.abbr;
-    int tw = strlen(label) * 6;
+    int tw = strlen(label) * 6 * textSize;   // ~6 px per char at size 1
     int tx = sx + 9;   // offset from the dot
-    int ty = sy - 4;
+    int ty = sy - 4 * textSize;
     // If the label would spill out of the circle on the right, put it on the left.
     if ((long)(tx + tw - cx) * (tx + tw - cx) + dy * dy > r2) {
       tx = sx - 9 - tw;
     }
-    gfx->setTextSize(1);
+    gfx->setTextSize(textSize);
     gfx->setTextColor(textColor);
     gfx->setCursor(tx, ty);
     gfx->print(label);

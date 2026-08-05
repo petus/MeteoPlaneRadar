@@ -31,7 +31,11 @@ void EuBorder_Draw(ProjectFn project, uint16_t color,
 // showFull = true -> full names, false -> abbreviations.
 // maxTier  = the least important tier still drawn (1 = only the largest cities,
 //            3 = everything down to 50k). Keeps dense areas legible when zoomed out.
+// textSize scales the label font (1 = default; the radar uses 1, the APRS
+// screen 2 for a bit more legibility). Adding it with a default keeps existing
+// callers unchanged.
 void EuBorder_DrawCities(ProjectFn project, int cx, int cy, int radius,
                          uint16_t dotColor, uint16_t textColor,
                          bool showFull, uint8_t maxTier,
-                         float lat0, float lat1, float lon0, float lon1);
+                         float lat0, float lat1, float lon0, float lon1,
+                         uint8_t textSize = 1);

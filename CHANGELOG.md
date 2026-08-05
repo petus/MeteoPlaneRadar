@@ -11,6 +11,25 @@ pohromadě v `src/Config.h`.
 
 ---
 
+## [0.6.1]
+
+### Přidáno
+- **APRS: domácí poloha na mapě.** Když je vaše poloha známá (ručně nebo přes IP)
+  a padne do aktuálního rozsahu kolem stanice, zobrazí se jako malý **azurový
+  bod** — hned vidíte, kde jste vůči stanici. Odlišený od stanice (zelený
+  kosočtverec).
+- **APRS: hustší mapa a čitelnější popisky.** Obrazovka ukazuje o úroveň víc měst
+  než radar letadel (do 50 km i města od 50 tis., dál od 150 tis.) a názvy měst
+  jsou ve větším písmu. `EuBorder_DrawCities` má nový nepovinný parametr
+  `textSize` (výchozí 1), takže radar letadel zůstává beze změny.
+
+### Změněno
+- **Ztišení konzole** (`-DCORE_DEBUG_LEVEL=0` v `platformio.ini`). Zmizí neškodné
+  `[E]` hlášky jádra — `setSocketOption … Bad file number` (z TLS spojení) a
+  `Wire … Error -1` (z I²C dotyku) — které nemají vliv na funkci a firmware je
+  jen zahazoval. Vlastní výpisy (`ADSB:`, `APRS:` …) zůstávají. Vedlejší efekt:
+  firmware se zmenšil o ~40 kB (odpadly ladicí řetězce jádra).
+
 ## [0.6]
 
 ### Přidáno

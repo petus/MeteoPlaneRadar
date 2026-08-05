@@ -123,6 +123,10 @@ měníte poloměr kolem ní (25 / 50 / 100 / 200 km). Barevný údaj dole řík�
 stará je poslední poloha (**zeleně** ≤ 15 min, **žlutě** ≤ 1 h, **červeně** víc)
 — čas se získává přes NTP, takže hned poznáte, jestli jsou data aktuální.
 
+Je-li známá **vaše poloha** a padne do rozsahu, ukáže se jako malý **azurový
+bod**, takže vidíte, kde jste vůči stanici. Mapa je tu oproti radaru hustší —
+víc měst a o něco větší popisky.
+
 Volací znak a API klíč se zadají ve **WiFi portálu** (Nastavení → WiFi/poloha,
 nebo captive portál při prvním připojení) do polí *APRS volací znak stanice* a
 *aprs.fi API klíč*. Klíč je **zdarma** — vygenerujete si ho po registraci na

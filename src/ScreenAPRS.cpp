@@ -174,11 +174,13 @@ void ScreenAPRS_Draw() {
 
     EuBorder_Draw(cityProject, C_GRAY, lat0, lat1, lon0, lon1);
     {
+      // The APRS screen carries little other data, so show more cities than the
+      // radar (one importance tier deeper) and in a slightly larger font.
       int rad = LCD_WIDTH / 2 - 4;
-      bool showFull = (range <= 25.0f);
-      uint8_t maxTier = (range <= 25.0f) ? 3 : (range <= 50.0f ? 2 : 1);
+      bool showFull = (range <= 50.0f);
+      uint8_t maxTier = (range <= 50.0f) ? 3 : 2;
       EuBorder_DrawCities(cityProject, R_CX, R_CY, rad, C_DKGRAY, C_GRAY,
-                          showFull, maxTier, lat0, lat1, lon0, lon1);
+                          showFull, maxTier, lat0, lat1, lon0, lon1, /*textSize=*/2);
     }
 
     // Range rings.
@@ -198,6 +200,18 @@ void ScreenAPRS_Draw() {
         int cyp = R_CY - (int)(cr * cosf(a)) - 4;
         gfx->setCursor(cxp, cyp);
         gfx->print(lbl[i]);
+      }
+    }
+
+    // Home location as a small cyan dot, if it is known and falls within the
+    // current radius around the station (so you see where you are relative to it).
+    if (Settings_HasLocation()) {
+      int hx, hy;
+      project(Settings_Lat(), Settings_Lon(), clat, clon, range, &hx, &hy);
+      long hdx = hx - R_CX, hdy = hy - R_CY;
+      if (hdx * hdx + hdy * hdy <= (long)R_RADIUS * R_RADIUS) {
+        gfx->fillCircle(hx, hy, 3, C_CYAN);
+        gfx->drawCircle(hx, hy, 6, C_CYAN);
       }
     }
 
