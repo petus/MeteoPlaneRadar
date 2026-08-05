@@ -11,6 +11,25 @@ pohromadě v `src/Config.h`.
 
 ---
 
+## [0.6.2]
+
+### Opraveno
+- **Displej se občas při studeném startu objevil rozpůlený na dvě poloviny.**
+  RGB panel ST7701 se po zapnutí napájení někdy zamkl na špatnou fázi
+  synchronizace; teplý reset to vždy spravil (panel přitom zůstává napájený).
+  Oprava má tři části:
+  - `display on` (0x29) se ST7701 posílá až **po** spuštění RGB periferie (když
+    už běží VSYNC/HSYNC/DE), aby se panel zamkl na platný sync od prvního snímku;
+  - u bounce bufferů se zapnul `bb_invalidate_cache` (brání nekoherenci cache
+    PSRAM, která obraz trvale posouvá);
+  - a hlavně: **při studeném startu se deska jednou sama rebootne**, ještě než
+    sáhne na displej, takže se panel vždy inicializuje po spolehlivé „teplé"
+    cestě. Reboot proběhne jen jednou (po něm už reset reason není power‑on),
+    split se nikdy nezobrazí a stojí jen zlomek vteřiny navíc.
+
+  Pozn.: laděním init prodlev (delší reset/settle) i restartem DMA se to jen
+  zhoršovalo, proto zůstávají krátké.
+
 ## [0.6.1]
 
 ### Přidáno

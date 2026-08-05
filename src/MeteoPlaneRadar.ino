@@ -247,6 +247,19 @@ void setup() {
   Serial.printf("Duvod restartu: %s\n", resetReasonText());
   Serial.printf("Volna pamet: %u B\n", (unsigned)ESP.getFreeHeap());
 
+  // ST7701 cold-start fix. On a raw power-on the RGB panel occasionally comes up
+  // split into two halves; a warm reset always brings it up cleanly (the LCD
+  // supply is held by the TCA9554 across a reset, so the panel stays powered).
+  // Rather than chase a fragile init-timing race, reboot ONCE on a cold power-on
+  // so the panel is always initialised on that reliable warm path. This runs
+  // before the display is touched (no split is ever shown), costs a fraction of
+  // a second, and cannot loop: the reboot's reset reason is no longer POWERON.
+  if (esp_reset_reason() == ESP_RST_POWERON) {
+    Serial.println("Studeny start - reboot pro spolehlivy nabeh displeje");
+    Serial.flush();
+    esp_restart();
+  }
+
   Settings_Begin();
   applyTimezone();   // needed for the weather frame labels, not for a clock
 

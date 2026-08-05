@@ -41,6 +41,10 @@ static bool IRAM_ATTR lcd_on_vsync(esp_lcd_panel_handle_t panel,
 
 uint32_t LCD_VsyncCount() { return s_vsyncCount; }
 
+void LCD_Restart() {
+  if (panel_handle) esp_lcd_rgb_panel_restart(panel_handle);
+}
+
 // --- ST7701 command/data over SPI (command_bits=1, address_bits=8) ---
 static void ST7701_Cmd(uint8_t cmd) {
   spi_transaction_t t = {};
@@ -139,7 +143,18 @@ static void ST7701_SendInit() {
   vTaskDelay(pdMS_TO_TICKS(480));
   ST7701_Cmd(0x20);                      // display inversion off
   vTaskDelay(pdMS_TO_TICKS(120));
-  ST7701_Cmd(0x29);                      // display on
+  ST7701_CS_Dis();
+  // 0x29 (display ON) is deliberately NOT sent here. It is deferred to
+  // ST7701_DisplayOn(), issued only AFTER the RGB peripheral is generating
+  // HSYNC/VSYNC/DE - otherwise the panel is switched on into a syncless gap and
+  // occasionally latches half a frame off ("two halves" on a cold start).
+}
+
+// Display ON. Sent once the RGB timing is already running so the ST7701 locks
+// onto valid sync from the first frame.
+static void ST7701_DisplayOn() {
+  ST7701_CS_En();
+  ST7701_Cmd(0x29);
   ST7701_CS_Dis();
 }
 
@@ -220,6 +235,10 @@ bool ST7701_Init() {
   rgb.data_gpio_nums[12] = RGB_D12;  rgb.data_gpio_nums[13] = RGB_D13;
   rgb.data_gpio_nums[14] = RGB_D14;  rgb.data_gpio_nums[15] = RGB_D15;
   rgb.flags.fb_in_psram = true;
+  // Invalidate the cache on each bounce-buffer read. Without it the DMA can read
+  // stale PSRAM through the cache, drift out of phase with the panel and leave
+  // the picture permanently shifted (the "two halves" seen on some cold starts).
+  rgb.flags.bb_invalidate_cache = true;
   // NOTE: double_fb is just an alias for num_fbs=2, which is set above.
   // NOTE: with bounce buffers the driver switches framebuffers via bb_fb_index
   // at the start of a frame, so handing over a framebuffer still works.
@@ -237,6 +256,14 @@ bool ST7701_Init() {
   }
   esp_lcd_panel_reset(panel_handle);
   esp_lcd_panel_init(panel_handle);
+
+  // The RGB peripheral is now driving HSYNC/VSYNC/DE. Switch the ST7701 on only
+  // now, so it locks onto valid sync from its first displayed frame instead of a
+  // syncless gap. (Longer settle delays and a DMA restart here were both tried
+  // and made the "two halves" cold start WORSE, so keep this short.) The real
+  // belt-and-braces fix is the one-shot reboot on cold power-on in setup().
+  vTaskDelay(pdMS_TO_TICKS(20));
+  ST7701_DisplayOn();
 
   // Register a VSYNC callback so LCD_Flush can synchronise the frame copy to the
   // start of a scan-out cycle (removes the mid-screen tearing band).

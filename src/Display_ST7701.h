@@ -86,6 +86,12 @@ uint16_t* LCD_FrameBuffer(int idx);
 // pointer switch (zero copy); any other pointer is copied in as before.
 void LCD_Flush(const uint16_t* fb);
 
+// Ask the RGB driver to re-align its DMA to VSYNC at the next frame. On some
+// cold starts the panel latches the DMA half a frame off and the picture comes
+// up split into two halves; a restart clears that "permanent shift" (the fix
+// esp_lcd_rgb_panel_restart() is documented for). Safe to call any time.
+void LCD_Restart();
+
 // Frames scanned out since boot, counted in the panel's VSYNC interrupt. Used
 // by the display watchdog in the main sketch: at ~29 fps this must keep rising,
 // and if it stops while the sketch is still running, the RGB peripheral has
