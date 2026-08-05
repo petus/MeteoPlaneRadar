@@ -17,6 +17,8 @@ MeteoPlaneRadar je samostatné WiFi zařízení s kulatým 480×480 displejem, k
   včetně detailu vybraného letu (výška, rychlost, kurz, stoupání/klesání, typ),
 - na **meteoradaru** zobrazuje animovaný srážkový kompozit **ČHMÚ** s obrysem ČR,
   městy a legendou (dBZ / mm/h),
+- na **APRS obrazovce** ukáže polohu jedné nastavené stanice z **aprs.fi** na
+  mapě vycentrované na stanici, s barevnou indikací stáří poslední pozice,
 - polohu si zjistí automaticky podle IP (ip‑api.com), nebo ji zadáte ručně.
 
 Poloha, obrys i města se promítají stejnou projekcí jako data, takže mapa vždy
@@ -50,6 +52,12 @@ Stačí tahle jedna deska a USB‑C kabel. Nic se nepájí ani nedrátuje.
   5 min, ~2 sn./s, pauza mezi cykly), **indikací času** ke každému snímku
   („nyní / −X min“ + HH:MM), legendou dBZ / mm/h, obrysem ČR a městy. Obraz je
   maskovaný do kruhu displeje.
+- **APRS stanice** (aprs.fi) — poloha jedné zvolené stanice na mapě, která je
+  **vycentrovaná na stanici**; rozsah (poloměr kolem ní) měníte přejetím prstem
+  jako u radaru. Dole ukazuje **stáří poslední pozice** barevně (zeleně ≤ 15 min,
+  žlutě ≤ 1 h, červeně starší; čas se synchronizuje přes NTP) a u pohyblivých
+  stanic rychlost a kurz. Volací znak a bezplatný **aprs.fi API klíč** se zadají
+  ve WiFi portálu.
 - **Nastavení** — jas, WiFi (captive portál s QR kódem), poloha, orientace
   mapy, zobrazení aktuální verze firmwaru a tlačítko pro bezdrátovou
   aktualizaci.
@@ -58,9 +66,9 @@ Stačí tahle jedna deska a USB‑C kabel. Nic se nepájí ani nedrátuje.
   jako ta za oknem. Osm poloh po 45°. Podrobnosti níže v [Ovládání](#ovládání).
 - **Aktualizace přes WiFi (OTA)** — nový firmware nahrajete z prohlížeče bez
   USB kabelu.
-- **Pamatuje si stav** — poslední zvolený rozsah (zvlášť pro letadla a
-  meteoradar) i naposledy zobrazenou obrazovku; po restartu naskočí tam, kde
-  jste skončili.
+- **Pamatuje si stav** — poslední zvolený rozsah (zvlášť pro letadla, meteoradar
+  i APRS) i naposledy zobrazenou obrazovku; po restartu naskočí tam, kde jste
+  skončili.
 - **Bez blikání pixelů** — celý snímek se kreslí do jednoho bufferu v PSRAM a
   na panel se posílá jedním přenosem synchronizovaným s VSYNC.
 - **Provoz 24/7** — hardwarový watchdog, zotavení dotykového řadiče po zámrzu
@@ -72,13 +80,13 @@ Ovládá se gesty na dotykovém displeji:
 
 | Gesto | Akce |
 |---|---|
-| **Přejetí prstem** vlevo/vpravo | změna rozsahu (na letadlech i meteoradaru) |
+| **Přejetí prstem** vlevo/vpravo | změna rozsahu (na letadlech, meteoradaru i APRS) |
 | **Krátké klepnutí** | výběr letadla / detail (zavření klepnutím mimo) |
 | **Dlouhý stisk v levé polovině** | předchozí obrazovka |
 | **Dlouhý stisk v pravé polovině** | následující obrazovka |
 | **Držení BOOT při startu (~3 s)** | tovární reset (WiFi + nastavení) |
 
-Obrazovky jsou tři: **Letadla → Meteoradar → Nastavení** (dokola).
+Obrazovky jsou čtyři: **Letadla → Meteoradar → APRS → Nastavení** (dokola).
 
 ### Orientace mapy (Nastavení → `Nahore`)
 
@@ -104,6 +112,20 @@ orientaci v ní drží obrys ČR.
 
 > Aktualizujete‑li z verze 0.5.1 nebo starší, kde se zadávalo „o kolik mapu
 > otočit", orientace se vrátí na sever nahoře. Nastavte si ji prosím znovu.
+
+### APRS stanice (aprs.fi)
+
+Třetí mapová obrazovka ukazuje polohu **jedné nastavené stanice** z
+[aprs.fi](https://aprs.fi). Mapa je **vycentrovaná na stanici** a přejetím prstem
+měníte poloměr kolem ní (25 / 50 / 100 / 200 km). Barevný údaj dole říká, jak
+stará je poslední poloha (**zeleně** ≤ 15 min, **žlutě** ≤ 1 h, **červeně** víc)
+— čas se získává přes NTP, takže hned poznáte, jestli jsou data aktuální.
+
+Volací znak a API klíč se zadají ve **WiFi portálu** (Nastavení → WiFi/poloha,
+nebo captive portál při prvním připojení) do polí *APRS volací znak stanice* a
+*aprs.fi API klíč*. Klíč je **zdarma** — vygenerujete si ho po registraci na
+[aprs.fi](https://aprs.fi) v sekci *My Account → API key*. Bez vyplněného znaku
+obrazovka jen vypíše výzvu k nastavení.
 
 Při prvním zapnutí (nebo po resetu) vytvoří zařízení WiFi síť
 **`MeteoPlaneRadar`** — připojte se (na displeji je i QR kód) a zadejte údaje
@@ -188,7 +210,7 @@ Otevřete Sériový monitor (v Arduino IDE, nebo libovolný terminál) a nastavt
 rychlost **115200 Bd**. Po startu uvidíte například:
 
 ```
-=== MeteoPlaneRadar v0.5.4 ===
+=== MeteoPlaneRadar v0.X.Y ===
 Duvod restartu: zapnuti napajeni
 Volna pamet: 218432 B
 Displej: dvojity framebuffer, kresleni bez kopirovani
@@ -250,6 +272,23 @@ v logu, že se hlásí `of 6291456 bytes`.
 Nastavení jako časová zóna, výchozí poloha, rozsahy nebo limity najdete
 pohromadě v **`src/Config.h`**. Verze firmwaru je v **`src/Version.h`**.
 
+### Překlad přes PlatformIO
+
+V kořeni projektu je `platformio.ini`, který nastavuje totéž, co tabulka výše
+(ESP32‑S3, OPI PSRAM, 16 MB QIO flash, custom `src/partitions.csv`, USB CDD on
+boot) a připíná stejný ESP32 core **3.0.7** i verze knihoven jako
+`sketch.yaml`. Používá se komunitní platforma **pioarduino** (oficiální
+`espressif32` zatím vozí jen core 2.x).
+
+```bash
+pio run              # překlad
+pio run -t upload    # nahrání firmwaru (konektor USB)
+pio run -t monitor   # sériový monitor (115200 Bd)
+```
+
+Knihovny se stáhnou automaticky. `ESPAsyncWebServer`/`AsyncTCP` jsou přes
+`lib_ignore` vyřazené — ElegantOTA běží v synchronním režimu a nepotřebuje je.
+
 ### Vytvoření souborů pro Releases
 
 - **`MeteoPlaneRadar.ino.bin`** (pro OTA) — *Sketch → Export Compiled Binary*.
@@ -269,7 +308,11 @@ Jen pro osobní, nekomerční použití — respektujte prosím podmínky poskyt
 - **Srážky (meteoradar):** Český hydrometeorologický ústav (ČHMÚ) —
   <https://opendata.chmi.cz>
   Kompozit: `https://opendata.chmi.cz/meteorology/weather/radar/composite/maxz/png/`
+- **APRS stanice:** aprs.fi — <https://aprs.fi>
+  API: `https://api.aprs.fi/api/get?name={znak}&what=loc&apikey={klíč}&format=json`
+  (vyžaduje bezplatný API klíč)
 - **Poloha podle IP:** ip‑api.com — <http://ip-api.com>
+- **Čas (NTP):** pool.ntp.org, time.google.com — pro stáří APRS pozic
 
 > Meteoradar ČHMÚ pokrývá **Českou republiku a blízké okolí**. Když máte polohu
 > nastavenou jinam (třeba do zahraničí), zůstane meteo obrazovka prázdná — data
@@ -296,6 +339,9 @@ Tento projekt nevznikl z ničeho. Navazuje na tři existující:
 
 Vyvinul **[chiptron.cz](https://chiptron.cz)**. Článek o projektu najdete na
 [https://chiptron.cz/meteoradar-a-radar-letadel-na-jednom-kulatem-displeji/](https://chiptron.cz/meteoradar-a-radar-letadel-na-jednom-kulatem-displeji/)
+
+Konverzi na **PlatformIO** a **APRS obrazovku** přidal **Ondra OK1CDJ**
+([apps.ok1cdj.com](https://apps.ok1cdj.com)).
 
 ## Verze
 

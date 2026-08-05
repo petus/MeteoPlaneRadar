@@ -11,6 +11,44 @@ pohromadě v `src/Config.h`.
 
 ---
 
+## [0.6]
+
+### Přidáno
+- **Nová obrazovka: APRS stanice (aprs.fi).** Ukazuje polohu **jedné nastavené
+  stanice** na mapě, která je **vycentrovaná na stanici** — rozsah (poloměr
+  kolem ní: 25 / 50 / 100 / 200 km) se mění přejetím prstem stejně jako
+  u radaru letadel. Dole se barevně zobrazuje **stáří poslední pozice**
+  (zeleně ≤ 15 min, žlutě ≤ 1 h, červeně víc), u pohyblivých stanic i rychlost
+  a kurz. Znovu využívá projekci, obrys států a města z radaru letadel. Zařazena
+  je mezi meteoradar a nastavení (**Letadla → Meteoradar → APRS → Nastavení**).
+  Data se stahují po 30 s, při chybě dvojnásobek; při selhání zůstane poslední
+  poloha na displeji.
+- **Synchronizace času přes NTP (vráceno).** APRS potřebuje vědět, jak jsou data
+  stará, takže se `configTzTime()` vrátil nad `setup()` (v 0.5.3 byl NTP odebrán
+  jako nepotřebný — přesně pro tento případ tam zůstala poznámka „kdyby přibyly
+  hodiny"). Běží **neblokujícím způsobem**: `time()` se stane platným pár sekund
+  po připojení, do té doby obrazovka píše `cas: ?`. HTTPS spojení dál jedou přes
+  `setInsecure()`, takže se neověřuje platnost certifikátů.
+- **Pole ve WiFi portálu** pro *APRS volací znak stanice* a *aprs.fi API klíč*
+  (bezplatný, z účtu na aprs.fi → *My Account → API key*). Ukládají se do NVS,
+  prázdné pole stávající hodnotu nepřepíše. Bez znaku obrazovka jen vypíše výzvu
+  k nastavení.
+- **Podpora PlatformIO.** V kořeni je `platformio.ini`, který zrcadlí
+  `sketch.yaml` (ESP32‑S3, OPI PSRAM, 16 MB QIO flash, custom `partitions.csv`,
+  USB CDC on boot) a připíná stejný ESP32 core **3.0.7** i verze knihoven.
+  Používá komunitní platformu **pioarduino** (oficiální `espressif32` zatím vozí
+  jen core 2.x); `ESPAsyncWebServer`/`AsyncTCP` jsou přes `lib_ignore` vyřazené
+  (ElegantOTA běží synchronně a nepotřebuje je). Překlad `pio run`, nahrání
+  `pio run -t upload`, monitor `pio run -t monitor`.
+- Konstanty `APRS_API_BASE`, `APRS_RANGES_KM` a `APRS_PERIOD_MS` (30 s)
+  v `src/Config.h`; nové klíče NVS `aprsCall`, `aprsKey`, `rngA`.
+
+### Opraveno
+- **Sladění se staršími verzemi knihoven připnutými v `sketch.yaml`.**
+  `Canvas16::flush()` má nově podpis `flush(void)` (odpovídá GFX 1.4.9) a
+  callback `pngDraw` v meteoradaru vrací `void` (PNGdec 1.0.1) — s těmito
+  připnutými verzemi projekt jinak neprošel překladem. Chování se nemění.
+
 ## [0.5.4]
 
 ### Opraveno

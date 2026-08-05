@@ -4,6 +4,7 @@
 //
 //  Project: MeteoPlaneRadar - live aircraft radar on a round touchscreen
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
+//           Ondra OK1CDJ / apps.ok1cdj.com
 //  Web:     https://chiptron.cz
 //  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
 // =============================================================================
@@ -51,12 +52,17 @@ static void onAP(WiFiManager* wm) {
   drawApScreen();
 }
 
-static void saveParams(WiFiManagerParameter& pLat, WiFiManagerParameter& pLon) {
+static void saveParams(WiFiManagerParameter& pLat, WiFiManagerParameter& pLon,
+                       WiFiManagerParameter& pCall, WiFiManagerParameter& pKey) {
   double lat = atof(pLat.getValue());
   double lon = atof(pLon.getValue());
   if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 && (lat != 0 || lon != 0)) {
     Settings_SetLocation(lat, lon);
   }
+  // APRS station + aprs.fi API key (only overwrite when the field is non-empty,
+  // so leaving them blank in the form does not wipe a stored value).
+  if (pCall.getValue()[0]) Settings_SetAprsCall(pCall.getValue());
+  if (pKey.getValue()[0])  Settings_SetAprsKey(pKey.getValue());
 }
 
 bool WiFi_ConnectOrPortal() {
@@ -75,13 +81,17 @@ bool WiFi_ConnectOrPortal() {
 
   WiFiManagerParameter pLat("lat", "Zeměpisná šířka (lat)", latBuf, 24);
   WiFiManagerParameter pLon("lon", "Zeměpisná délka (lon)", lonBuf, 24);
+  WiFiManagerParameter pCall("aprscall", "APRS volací znak stanice", Settings_AprsCall(), 15);
+  WiFiManagerParameter pKey("aprskey", "aprs.fi API klíč", Settings_AprsKey(), 23);
   wm.addParameter(&pLat);
   wm.addParameter(&pLon);
-  wm.setSaveParamsCallback([&] { saveParams(pLat, pLon); });
+  wm.addParameter(&pCall);
+  wm.addParameter(&pKey);
+  wm.setSaveParamsCallback([&] { saveParams(pLat, pLon, pCall, pKey); });
 
   bool ok = wm.autoConnect(AP_SSID, apPass());
   if (ok) {
-    saveParams(pLat, pLon);
+    saveParams(pLat, pLon, pCall, pKey);
     Serial.printf("WiFi ok, IP %s\n", WiFi.localIP().toString().c_str());
   } else {
     Serial.println("WiFi not connected");
@@ -102,11 +112,15 @@ void WiFi_StartPortal() {
   wm.setMenu(menu, 3);
   WiFiManagerParameter pLat("lat", "Zeměpisná šířka (lat)", latBuf, 24);
   WiFiManagerParameter pLon("lon", "Zeměpisná délka (lon)", lonBuf, 24);
+  WiFiManagerParameter pCall("aprscall", "APRS volací znak stanice", Settings_AprsCall(), 15);
+  WiFiManagerParameter pKey("aprskey", "aprs.fi API klíč", Settings_AprsKey(), 23);
   wm.addParameter(&pLat);
   wm.addParameter(&pLon);
-  wm.setSaveParamsCallback([&] { saveParams(pLat, pLon); });
+  wm.addParameter(&pCall);
+  wm.addParameter(&pKey);
+  wm.setSaveParamsCallback([&] { saveParams(pLat, pLon, pCall, pKey); });
   wm.startConfigPortal(AP_SSID, apPass());
-  saveParams(pLat, pLon);
+  saveParams(pLat, pLon, pCall, pKey);
 }
 
 void WiFi_Loop() {

@@ -4,11 +4,13 @@
 //
 //  Project: MeteoPlaneRadar - live aircraft radar on a round touchscreen
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
+//           Ondra OK1CDJ / apps.ok1cdj.com
 //  Web:     https://chiptron.cz
 //  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
 // =============================================================================
 #include "Settings.h"
 #include <Preferences.h>
+#include <string.h>   // strncpy for the APRS callsign / API key
 
 static Preferences prefs;
 static const char* NS = "planeradar";
@@ -22,10 +24,15 @@ static bool    s_metric = false;   // aviation units by default
 // UI state (range per screen + active screen) with a debounced NVS write.
 static uint8_t s_rngP = 1;              // plane range index (25 km default)
 static uint8_t s_rngM = 1;              // meteo range index (50 km default)
+static uint8_t s_rngA = 2;              // APRS range index (100 km default)
 static uint8_t s_scr  = 0;              // active screen (0 = planes)
 static uint16_t s_top = 0;              // bearing shown at the top (0 = north up)
 static bool          s_uiDirty   = false;
 static unsigned long s_uiDirtyAt = 0;
+
+// APRS station identity + aprs.fi API key (written immediately, not debounced).
+static char s_aprsCall[16] = "";
+static char s_aprsKey[24]  = "";
 
 void Settings_Begin() {
   if (prefs.begin(NS, true)) {
@@ -36,8 +43,11 @@ void Settings_Begin() {
     s_metric = prefs.getBool("metric", false);
     s_rngP   = prefs.getUChar("rngP", 1);
     s_rngM   = prefs.getUChar("rngM", 1);
+    s_rngA   = prefs.getUChar("rngA", 2);
     s_scr    = prefs.getUChar("scr", 0);
     s_top    = prefs.getUShort("topb", 0);   // new key: old "rot" meant something else
+    prefs.getString("aprsCall", s_aprsCall, sizeof(s_aprsCall));
+    prefs.getString("aprsKey",  s_aprsKey,  sizeof(s_aprsKey));
     prefs.end();
   }
 }
@@ -82,6 +92,26 @@ uint8_t Settings_MeteoRange() { return s_rngM; }
 void    Settings_SetMeteoRange(uint8_t idx) {
   if (idx != s_rngM) { s_rngM = idx; s_uiDirty = true; s_uiDirtyAt = millis(); }
 }
+uint8_t Settings_AprsRange() { return s_rngA; }
+void    Settings_SetAprsRange(uint8_t idx) {
+  if (idx != s_rngA) { s_rngA = idx; s_uiDirty = true; s_uiDirtyAt = millis(); }
+}
+
+const char* Settings_AprsCall() { return s_aprsCall; }
+void Settings_SetAprsCall(const char* call) {
+  if (!call) return;
+  strncpy(s_aprsCall, call, sizeof(s_aprsCall) - 1);
+  s_aprsCall[sizeof(s_aprsCall) - 1] = '\0';
+  if (prefs.begin(NS, false)) { prefs.putString("aprsCall", s_aprsCall); prefs.end(); }
+}
+
+const char* Settings_AprsKey() { return s_aprsKey; }
+void Settings_SetAprsKey(const char* key) {
+  if (!key) return;
+  strncpy(s_aprsKey, key, sizeof(s_aprsKey) - 1);
+  s_aprsKey[sizeof(s_aprsKey) - 1] = '\0';
+  if (prefs.begin(NS, false)) { prefs.putString("aprsKey", s_aprsKey); prefs.end(); }
+}
 uint16_t Settings_TopBearing() { return s_top; }
 void     Settings_SetTopBearing(uint16_t deg) {
   deg %= 360;
@@ -102,6 +132,7 @@ void Settings_Tick() {
   if (prefs.begin(NS, false)) {
     prefs.putUChar("rngP", s_rngP);
     prefs.putUChar("rngM", s_rngM);
+    prefs.putUChar("rngA", s_rngA);
     prefs.putUChar("scr",  s_scr);
     prefs.putUShort("topb", s_top);
     prefs.putUChar("bl",   s_bl);
@@ -114,5 +145,6 @@ void Settings_ClearAll() {
   if (prefs.begin(NS, false)) { prefs.clear(); prefs.end(); }
   s_lat = DEFAULT_LAT; s_lon = DEFAULT_LON; s_hasLoc = false; s_bl = 80;
   s_metric = false;
-  s_rngP = 1; s_rngM = 1; s_scr = 0; s_top = 0; s_uiDirty = false;
+  s_rngP = 1; s_rngM = 1; s_rngA = 2; s_scr = 0; s_top = 0; s_uiDirty = false;
+  s_aprsCall[0] = '\0'; s_aprsKey[0] = '\0';
 }

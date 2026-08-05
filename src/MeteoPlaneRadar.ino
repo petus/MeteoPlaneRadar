@@ -5,6 +5,7 @@
 // =============================================================================
 //
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
+//           Ondra OK1CDJ / apps.ok1cdj.com
 //  Web:     https://chiptron.cz
 //  Board:   Waveshare ESP32-S3-Touch-LCD-2.1
 //           - ESP32-S3R8 (8 MB PSRAM, 16 MB flash)
@@ -80,6 +81,8 @@
 #include "GeoIP.h"
 #include "ADSB.h"
 #include "ScreenPlanes.h"
+#include "APRS.h"
+#include "ScreenAPRS.h"
 #include "CHMU.h"
 #include "ScreenWeather.h"
 #include "ScreenSettings.h"
@@ -119,8 +122,9 @@ static void checkBootReset() {
 }
 
 // --- Screen manager ---
-// 0 = aircraft radar, 1 = meteoradar, 2 = settings.
-enum { SCREEN_PLANES = 0, SCREEN_METEO = 1, SCREEN_SETTINGS = 2, SCREEN_COUNT = 3 };
+// 0 = aircraft radar, 1 = meteoradar, 2 = APRS station, 3 = settings.
+enum { SCREEN_PLANES = 0, SCREEN_METEO = 1, SCREEN_APRS = 2, SCREEN_SETTINGS = 3,
+       SCREEN_COUNT = 4 };
 static int s_screen = SCREEN_PLANES;
 
 // Screen indicator - dots near the top edge (inside the circle).
@@ -140,6 +144,7 @@ static void drawActive() {
   switch (s_screen) {
     case SCREEN_PLANES:   ScreenPlanes_Draw();   break;
     case SCREEN_METEO:    ScreenWeather_Draw();  break;
+    case SCREEN_APRS:     ScreenAPRS_Draw();     break;
     case SCREEN_SETTINGS: ScreenSettings_Draw(); break;
   }
   drawScreenDots();
@@ -150,6 +155,7 @@ static void enterActive() {
   switch (s_screen) {
     case SCREEN_PLANES:   ScreenPlanes_Enter();   break;
     case SCREEN_METEO:    ScreenWeather_Enter();  break;
+    case SCREEN_APRS:     ScreenAPRS_Enter();     break;
     case SCREEN_SETTINGS: ScreenSettings_Enter(); break;
   }
   drawActive();
@@ -169,6 +175,7 @@ static bool activeTick() {
   switch (s_screen) {
     case SCREEN_PLANES:   return ScreenPlanes_Tick();
     case SCREEN_METEO:    return ScreenWeather_Tick();
+    case SCREEN_APRS:     return ScreenAPRS_Tick();
     case SCREEN_SETTINGS: return ScreenSettings_Tick();
   }
   return false;
@@ -179,6 +186,7 @@ static void activeChangeRange(int dir) {
   switch (s_screen) {
     case SCREEN_PLANES: ScreenPlanes_ChangeRange(dir);  break;
     case SCREEN_METEO:  ScreenWeather_ChangeRange(dir); break;
+    case SCREEN_APRS:   ScreenAPRS_ChangeRange(dir);    break;
     default: break;   // settings has no range
   }
 }
@@ -213,17 +221,18 @@ static const char* resetReasonText() {
   }
 }
 
-// NOTE: there is deliberately NO clock in this firmware. Nothing needs one:
-// the HH:MM under each weather frame is derived from that frame's own name
-// (CHMU.cpp), the "nyni / -X min" label from the frame's position in the
-// animation, and every HTTPS connection uses setInsecure(), so no certificate
-// validity is checked either. NTP was dropped in 0.5.3 - if a wall clock is
-// ever added to the UI, put configTzTime() back here.
+// The weather screen needs no clock (its HH:MM comes from each frame's own name
+// in CHMU.cpp), but the APRS screen does: it shows how old a station's last
+// position is, and "we have current data" is the whole point. So SNTP is started
+// once WiFi is up (see setup()). It is non-blocking - time() simply becomes
+// valid a few seconds later, and every HTTPS connection still uses setInsecure()
+// so no certificate validity is checked.
 //
-// The time ZONE still has to be set up though. CHMU.cpp converts each frame's
-// UTC timestamp with localtime_r(), and without TZ in the environment that
-// would quietly hand back UTC - the labels would be an hour or two out. This
-// used to be a side effect of configTzTime(); now it is done explicitly.
+// applyTimezone() runs first and independently: CHMU.cpp converts each frame's
+// UTC timestamp with localtime_r(), and without TZ in the environment that would
+// quietly hand back UTC - the labels would be an hour or two out. This has to
+// hold even before (or without) an NTP sync, so the TZ is set here explicitly;
+// configTzTime() later sets the same TZ again and adds the servers.
 static void applyTimezone() {
   setenv("TZ", TZ_INFO, 1);
   tzset();
@@ -288,9 +297,15 @@ void setup() {
   checkBootReset();
 
   ADSB_SetPollFn(netPoll);
+  APRS_SetPollFn(netPoll);
   CHMU_SetPollFn(netPoll);
 
   WiFi_ConnectOrPortal();
+
+  // Start SNTP (TZ was already set by applyTimezone). Non-blocking: the network
+  // stack is up now, time() turns valid once a server answers. Used by the APRS
+  // screen to show how fresh a station's last position is.
+  configTzTime(TZ_INFO, "pool.ntp.org", "time.google.com", "time.cloudflare.com");
 
   if (WiFi_IsConnected()) {
     GeoIP_DetectIfNeeded();   // fill in the location by IP if the user did not set one

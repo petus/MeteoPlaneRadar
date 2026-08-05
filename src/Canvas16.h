@@ -15,6 +15,7 @@
 //
 //  Project: MeteoPlaneRadar - live aircraft radar on a round touchscreen
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
+//           Ondra OK1CDJ / apps.ok1cdj.com
 //  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
 // =============================================================================
 #pragma once
@@ -51,15 +52,14 @@ class Canvas16 : public Arduino_GFX {
 
   uint16_t* getFramebuffer() { return _fb; }
 
-  // Single controlled flush. Signature must match Arduino_GFX::flush(bool)
+  // Single controlled flush. Signature must match Arduino_GFX::flush(void)
   // exactly so a call through an Arduino_GFX* is dispatched here, not to the base.
   //
   // In zero-copy mode this hands the finished framebuffer to the panel and then
   // moves drawing to the other one, so the next frame is never drawn into the
   // buffer currently on screen. Doing the switch HERE means every gfx->flush()
   // in the project (radar, weather, WiFi portal, OTA) gets it automatically.
-  void flush(bool force_flush = false) override {
-    (void)force_flush;
+  void flush(void) override {
     if (!_fb) return;
     LCD_Flush(_fb);
     if (!_owned) {
