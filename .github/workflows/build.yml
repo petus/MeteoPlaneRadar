@@ -72,7 +72,7 @@ jobs:
       # --- Release assets (only on a version tag) ---
       # Named to match the README: *.ino.bin for OTA, *.ino.merged.bin for the
       # web flasher. firmware.bin is the plain app image ElegantOTA expects.
-      - name: Prepare release assets
+      - name: Prepare release assets + notes
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           set -eu
@@ -82,9 +82,24 @@ jobs:
           cp "${BUILD}/firmware.bin"             "release/MeteoPlaneRadar_${TAG}.ino.bin"
           cp "${BUILD}/MeteoPlaneRadar.merged.bin" "release/MeteoPlaneRadar_${TAG}.ino.merged.bin"
 
+          # Release notes = the matching CHANGELOG section (tag v0.6 -> "## [0.6]",
+          # up to the next "## [" heading). Empty if the version is not listed.
+          VERSION="${TAG#v}"
+          awk -v ver="$VERSION" '
+            BEGIN { re = "^## \\[" ver "\\]" }
+            $0 ~ re { flag = 1; next }
+            flag && /^## \[/ { flag = 0 }
+            flag { print }
+          ' CHANGELOG.md > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "Verze ${VERSION} není v CHANGELOG.md - viz historie změn." > release_notes.md
+          fi
+
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: release/*
           fail_on_unmatched_files: true
+          body_path: release_notes.md
+          generate_release_notes: true
