@@ -2,12 +2,20 @@ name: build
 
 # Compile the firmware on every push / PR so a broken build is caught early.
 # Uses PlatformIO (platformio.ini) - the same pinned ESP32 core 3.0.7 and
-# library versions as a local build.
+# library versions as a local build. On a version tag (e.g. v0.6) the two
+# release binaries are attached to the GitHub Release automatically.
 
 on:
   push:
   pull_request:
   workflow_dispatch:
+
+# Needed so the release step can upload assets with the built-in GITHUB_TOKEN.
+permissions:
+  contents: write
+
+env:
+  PIO_ENV: esp32-s3-meteoplaneradar
 
 jobs:
   platformio:
@@ -30,17 +38,53 @@ jobs:
           key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-${{ runner.os }}-
 
-      - name: Install PlatformIO
-        run: pip install --upgrade platformio
+      - name: Install PlatformIO + esptool
+        run: pip install --upgrade platformio "esptool>=4.8,<5"
 
       - name: Build
         run: pio run
 
-      - name: Upload firmware
+      # Single flashable image for the web flasher (esp32flasher.chiptron.cz):
+      # bootloader + partition table + OTA data + app at their flash offsets.
+      # Offsets are the ESP32-S3 defaults (bootloader at 0x0, not 0x1000).
+      - name: Merge firmware (web-flasher image)
+        run: |
+          set -eu
+          BUILD=".pio/build/${PIO_ENV}"
+          BOOT_APP0=$(find ~/.platformio/packages/framework-arduinoespressif32 -name boot_app0.bin | head -n1)
+          python -m esptool --chip esp32s3 merge_bin \
+            --flash_mode keep --flash_freq keep --flash_size 16MB \
+            -o "${BUILD}/MeteoPlaneRadar.merged.bin" \
+            0x0     "${BUILD}/bootloader.bin" \
+            0x8000  "${BUILD}/partitions.bin" \
+            0xe000  "${BOOT_APP0}" \
+            0x10000 "${BUILD}/firmware.bin"
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: firmware
           path: |
-            .pio/build/*/firmware.bin
-            .pio/build/*/firmware.elf
+            .pio/build/${{ env.PIO_ENV }}/firmware.bin
+            .pio/build/${{ env.PIO_ENV }}/MeteoPlaneRadar.merged.bin
           if-no-files-found: error
+
+      # --- Release assets (only on a version tag) ---
+      # Named to match the README: *.ino.bin for OTA, *.ino.merged.bin for the
+      # web flasher. firmware.bin is the plain app image ElegantOTA expects.
+      - name: Prepare release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -eu
+          BUILD=".pio/build/${PIO_ENV}"
+          TAG="${GITHUB_REF_NAME}"
+          mkdir -p release
+          cp "${BUILD}/firmware.bin"             "release/MeteoPlaneRadar_${TAG}.ino.bin"
+          cp "${BUILD}/MeteoPlaneRadar.merged.bin" "release/MeteoPlaneRadar_${TAG}.ino.merged.bin"
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          fail_on_unmatched_files: true

@@ -2,10 +2,10 @@
 
 [![build](https://github.com/ok1cdj/MeteoPlaneRadar/actions/workflows/build.yml/badge.svg)](https://github.com/ok1cdj/MeteoPlaneRadar/actions/workflows/build.yml)
 
-**Živý radar letadel (ADS-B) a srážkový meteoradar ČHMÚ na kulatém dotykovém
-displeji.** Zařízení běží na desce Waveshare ESP32‑S3‑Touch‑LCD‑2.1 a v jednom
-přístroji spojuje sledování letadel v okolí a animovanou srážkovou situaci nad
-Českou republikou.
+**Živý radar letadel (ADS-B), srážkový meteoradar ČHMÚ a poloha APRS stanice na
+kulatém dotykovém displeji.** Zařízení běží na desce Waveshare
+ESP32‑S3‑Touch‑LCD‑2.1 a v jednom přístroji spojuje sledování letadel v okolí,
+animovanou srážkovou situaci nad Českou republikou a polohu vybrané APRS stanice.
 
 > Za vývojem stojí **[chiptron.cz](https://chiptron.cz)** a Claude AI.
 
