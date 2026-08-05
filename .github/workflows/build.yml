@@ -1,0 +1,46 @@
+name: build
+
+# Compile the firmware on every push / PR so a broken build is caught early.
+# Uses PlatformIO (platformio.ini) - the same pinned ESP32 core 3.0.7 and
+# library versions as a local build.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  platformio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The pioarduino platform + Xtensa toolchain are a few hundred MB; caching
+      # them turns a ~5 min first build into well under a minute afterwards.
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build
+        run: pio run
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            .pio/build/*/firmware.bin
+            .pio/build/*/firmware.elf
+          if-no-files-found: error
