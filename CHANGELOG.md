@@ -11,6 +11,98 @@ pohromadě v `src/Config.h`.
 
 ---
 
+## [0.7.0]
+
+### Přidáno
+- **Automatické přepínání obrazovek po nastaveném čase.** Na obrazovce Nastavení
+  přibyl řádek „Auto min" s tlačítky `[-] hodnota [+]` (stejný ovládací vzor jako
+  u natočení mapy). Interval je 0–9 minut, `Vyp` (0) je výchozí a znamená, že se
+  obrazovky samy nepřepínají.
+  - Cyklí se jen radarové obrazovky **ADSB → RADAR → APRS** (Nastavení se
+    přeskakuje).
+  - **Jakýkoli dotyk** cyklení pozastaví na 10 minut a nechá aktuální obrazovku;
+    během pauzy funguje normální ruční přepínání dlouhým stiskem, takže se lze
+    dostat i do Nastavení. Po 10 minutách bez dotyku se cyklení zase rozjede.
+  - Nastavená hodnota se ukládá do NVS jako ostatní nastavení.
+
+---
+
+## [0.6.2]
+
+### Opraveno
+- **Displej se občas při studeném startu objevil rozpůlený na dvě poloviny.**
+  RGB panel ST7701 se po zapnutí napájení někdy zamkl na špatnou fázi
+  synchronizace; teplý reset to vždy spravil (panel přitom zůstává napájený).
+  Oprava má tři části:
+  - `display on` (0x29) se ST7701 posílá až **po** spuštění RGB periferie (když
+    už běží VSYNC/HSYNC/DE), aby se panel zamkl na platný sync od prvního snímku;
+  - u bounce bufferů se zapnul `bb_invalidate_cache` (brání nekoherenci cache
+    PSRAM, která obraz trvale posouvá);
+  - a hlavně: **při studeném startu se deska jednou sama rebootne**, ještě než
+    sáhne na displej, takže se panel vždy inicializuje po spolehlivé „teplé"
+    cestě. Reboot proběhne jen jednou (po něm už reset reason není power‑on),
+    split se nikdy nezobrazí a stojí jen zlomek vteřiny navíc.
+
+  Pozn.: laděním init prodlev (delší reset/settle) i restartem DMA se to jen
+  zhoršovalo, proto zůstávají krátké.
+
+## [0.6.1]
+
+### Přidáno
+- **APRS: domácí poloha na mapě.** Když je vaše poloha známá (ručně nebo přes IP)
+  a padne do aktuálního rozsahu kolem stanice, zobrazí se jako malý **azurový
+  bod** — hned vidíte, kde jste vůči stanici. Odlišený od stanice (zelený
+  kosočtverec).
+- **APRS: hustší mapa a čitelnější popisky.** Obrazovka ukazuje o úroveň víc měst
+  než radar letadel (do 50 km i města od 50 tis., dál od 150 tis.) a názvy měst
+  jsou ve větším písmu. `EuBorder_DrawCities` má nový nepovinný parametr
+  `textSize` (výchozí 1), takže radar letadel zůstává beze změny.
+
+### Změněno
+- **Ztišení konzole** (`-DCORE_DEBUG_LEVEL=0` v `platformio.ini`). Zmizí neškodné
+  `[E]` hlášky jádra — `setSocketOption … Bad file number` (z TLS spojení) a
+  `Wire … Error -1` (z I²C dotyku) — které nemají vliv na funkci a firmware je
+  jen zahazoval. Vlastní výpisy (`ADSB:`, `APRS:` …) zůstávají. Vedlejší efekt:
+  firmware se zmenšil o ~40 kB (odpadly ladicí řetězce jádra).
+
+## [0.6]
+
+### Přidáno
+- **Nová obrazovka: APRS stanice (aprs.fi).** Ukazuje polohu **jedné nastavené
+  stanice** na mapě, která je **vycentrovaná na stanici** — rozsah (poloměr
+  kolem ní: 25 / 50 / 100 / 200 km) se mění přejetím prstem stejně jako
+  u radaru letadel. Dole se barevně zobrazuje **stáří poslední pozice**
+  (zeleně ≤ 15 min, žlutě ≤ 1 h, červeně víc), u pohyblivých stanic i rychlost
+  a kurz. Znovu využívá projekci, obrys států a města z radaru letadel. Zařazena
+  je mezi meteoradar a nastavení (**Letadla → Meteoradar → APRS → Nastavení**).
+  Data se stahují po 30 s, při chybě dvojnásobek; při selhání zůstane poslední
+  poloha na displeji.
+- **Synchronizace času přes NTP (vráceno).** APRS potřebuje vědět, jak jsou data
+  stará, takže se `configTzTime()` vrátil nad `setup()` (v 0.5.3 byl NTP odebrán
+  jako nepotřebný — přesně pro tento případ tam zůstala poznámka „kdyby přibyly
+  hodiny"). Běží **neblokujícím způsobem**: `time()` se stane platným pár sekund
+  po připojení, do té doby obrazovka píše `cas: ?`. HTTPS spojení dál jedou přes
+  `setInsecure()`, takže se neověřuje platnost certifikátů.
+- **Pole ve WiFi portálu** pro *APRS volací znak stanice* a *aprs.fi API klíč*
+  (bezplatný, z účtu na aprs.fi → *My Account → API key*). Ukládají se do NVS,
+  prázdné pole stávající hodnotu nepřepíše. Bez znaku obrazovka jen vypíše výzvu
+  k nastavení.
+- **Podpora PlatformIO.** V kořeni je `platformio.ini`, který zrcadlí
+  `sketch.yaml` (ESP32‑S3, OPI PSRAM, 16 MB QIO flash, custom `partitions.csv`,
+  USB CDC on boot) a připíná stejný ESP32 core **3.0.7** i verze knihoven.
+  Používá komunitní platformu **pioarduino** (oficiální `espressif32` zatím vozí
+  jen core 2.x); `ESPAsyncWebServer`/`AsyncTCP` jsou přes `lib_ignore` vyřazené
+  (ElegantOTA běží synchronně a nepotřebuje je). Překlad `pio run`, nahrání
+  `pio run -t upload`, monitor `pio run -t monitor`.
+- Konstanty `APRS_API_BASE`, `APRS_RANGES_KM` a `APRS_PERIOD_MS` (30 s)
+  v `src/Config.h`; nové klíče NVS `aprsCall`, `aprsKey`, `rngA`.
+
+### Opraveno
+- **Sladění se staršími verzemi knihoven připnutými v `sketch.yaml`.**
+  `Canvas16::flush()` má nově podpis `flush(void)` (odpovídá GFX 1.4.9) a
+  callback `pngDraw` v meteoradaru vrací `void` (PNGdec 1.0.1) — s těmito
+  připnutými verzemi projekt jinak neprošel překladem. Chování se nemění.
+
 ## [0.5.4]
 
 ### Opraveno

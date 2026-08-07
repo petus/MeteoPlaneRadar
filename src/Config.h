@@ -9,6 +9,7 @@
 //
 //  Project: MeteoPlaneRadar - live aircraft radar on a round touchscreen
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
+//           Ondra OK1CDJ / apps.ok1cdj.com
 //  Web:     https://chiptron.cz
 //  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
 // =============================================================================
@@ -65,6 +66,17 @@
 //  Weather radar (CHMU)
 // ---------------------------------------------------------------------------
 #define METEO_RANGES_KM { 25.0f, 50.0f, 100.0f, 200.0f }
+
+// ---------------------------------------------------------------------------
+//  APRS station (aprs.fi)
+//
+//  Shows the position of ONE configured station on the map. The callsign and a
+//  (free) aprs.fi API key are entered in the WiFi portal and stored in NVS
+//  (Settings.*). aprs.fi asks callers not to poll more often than every ~15 s.
+// ---------------------------------------------------------------------------
+#define APRS_API_BASE  "https://api.aprs.fi/api/get"
+#define APRS_RANGES_KM { 25.0f, 50.0f, 100.0f, 200.0f }   // stations sit farther out
+#define APRS_PERIOD_MS 30000UL    // poll interval (doubled after a failed fetch)
 
 // ---------------------------------------------------------------------------
 //  OTA (firmware update over WiFi)

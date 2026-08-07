@@ -1,0 +1,8 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# IDE
+.vscode/
+.idea/

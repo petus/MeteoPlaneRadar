@@ -19,12 +19,14 @@
 
 // Round panel - controls centred in a vertical list. The rows are packed a bit
 // tighter than before to make room for the map-rotation row.
-#define ROW_BRIGHT   92    // brightness label
-#define SL_Y        116    // slider
-#define ROW_WIFI    156
-#define ROW_LOC     206
-#define ROT_Y       254    // map rotation row
+#define ROW_BRIGHT   84    // brightness label
+#define SL_Y        106    // slider
+#define ROW_WIFI    146
+#define ROW_LOC     192
+#define ROT_Y       236    // map rotation row
 #define ROT_H        40
+#define AUTO_Y      280    // auto screen-switch interval row
+#define AUTO_H       40
 
 // Brightness slider.
 #define SL_X  90
@@ -40,15 +42,15 @@
 
 // Small compass preview on the left edge, next to the rotation row.
 #define COMPASS_CX    48
-#define COMPASS_CY   274
+#define COMPASS_CY   256
 #define COMPASS_R     24
 
 // Two stacked buttons (WiFi/location + firmware update).
 #define BTN_X   90
 #define BTN_W   300
 #define BTN_H   42
-#define BTN1_Y  300        // WiFi / poloha (portal)
-#define BTN2_Y  348        // aktualizace FW (OTA)
+#define BTN1_Y  322        // WiFi / poloha (portal)
+#define BTN2_Y  366        // aktualizace FW (OTA)
 
 static bool s_wantsPortal = false;
 static bool s_wantsOTA    = false;
@@ -93,6 +95,19 @@ bool ScreenSettings_HandleTap(int x, int y) {
     }
     if (x >= ROT_PLUS_X && x <= ROT_PLUS_X + ROT_BTN_W) {
       Settings_SetTopBearing((uint16_t)((top + MAP_ROT_STEP_DEG) % 360));
+      return true;
+    }
+  }
+  // Auto screen-switch interval: [-]/[+] step the minutes 0..9 (0 = off), clamped
+  // at both ends (unlike the compass row, which wraps).
+  if (y >= AUTO_Y && y <= AUTO_Y + AUTO_H) {
+    int m = (int)Settings_AutoSwitchMin();
+    if (x >= ROT_MINUS_X && x <= ROT_MINUS_X + ROT_BTN_W) {
+      Settings_SetAutoSwitchMin((uint8_t)(m > 0 ? m - 1 : 0));
+      return true;
+    }
+    if (x >= ROT_PLUS_X && x <= ROT_PLUS_X + ROT_BTN_W) {
+      Settings_SetAutoSwitchMin((uint8_t)(m < 9 ? m + 1 : 9));
       return true;
     }
   }
@@ -187,6 +202,20 @@ void ScreenSettings_Draw() {
     gfx->setCursor(lx, ly); gfx->print("S");
   }
 
+  // --- Auto screen switching: label + [-] [value] [+] (same pattern as above) ---
+  // Value is the interval in minutes; "Vyp" (off) means the screens never auto-cycle.
+  gfx->setTextSize(2); gfx->setTextColor(C_GRAY);
+  gfx->setCursor(SL_X, AUTO_Y + 12); gfx->print("Auto min");
+
+  uint8_t am = Settings_AutoSwitchMin();
+  gfx->fillRoundRect(ROT_MINUS_X, AUTO_Y, ROT_BTN_W, ROT_H, 8, C_DKGRAY);
+  UI_TextCenteredIn("-", ROT_MINUS_X, ROT_BTN_W, AUTO_Y + 12, C_WHITE, 2);
+  gfx->fillRoundRect(ROT_PLUS_X, AUTO_Y, ROT_BTN_W, ROT_H, 8, C_DKGRAY);
+  UI_TextCenteredIn("+", ROT_PLUS_X, ROT_BTN_W, AUTO_Y + 12, C_WHITE, 2);
+  { char ab[8];
+    if (am == 0) strcpy(ab, "Vyp"); else snprintf(ab, sizeof(ab), "%u", am);
+    UI_TextCenteredIn(ab, ROT_VAL_X, ROT_VAL_W, AUTO_Y + 12, C_YELLOW, 2); }
+
   // --- Button 1: change WiFi / location (portal) ---
   gfx->fillRoundRect(BTN_X, BTN1_Y, BTN_W, BTN_H, 12, C_CYAN);
   UI_TextCentered("WiFi / poloha", BTN1_Y + BTN_H / 2 - 8, C_BLACK, 2);
@@ -196,5 +225,5 @@ void ScreenSettings_Draw() {
   UI_TextCentered("Aktualizace FW", BTN2_Y + BTN_H / 2 - 8, C_BLACK, 2);
 
   // Signature at the bottom.
-  UI_TextCentered("chiptron.cz", 404, C_GREEN, 2);
+  UI_TextCentered("chiptron.cz", 414, C_GREEN, 2);
 }

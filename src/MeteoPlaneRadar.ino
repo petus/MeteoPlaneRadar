@@ -5,6 +5,7 @@
 // =============================================================================
 //
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
+//           Ondra OK1CDJ / apps.ok1cdj.com
 //  Web:     https://chiptron.cz
 //  Board:   Waveshare ESP32-S3-Touch-LCD-2.1
 //           - ESP32-S3R8 (8 MB PSRAM, 16 MB flash)
@@ -80,6 +81,8 @@
 #include "GeoIP.h"
 #include "ADSB.h"
 #include "ScreenPlanes.h"
+#include "APRS.h"
+#include "ScreenAPRS.h"
 #include "CHMU.h"
 #include "ScreenWeather.h"
 #include "ScreenSettings.h"
@@ -119,9 +122,18 @@ static void checkBootReset() {
 }
 
 // --- Screen manager ---
-// 0 = aircraft radar, 1 = meteoradar, 2 = settings.
-enum { SCREEN_PLANES = 0, SCREEN_METEO = 1, SCREEN_SETTINGS = 2, SCREEN_COUNT = 3 };
+// 0 = aircraft radar, 1 = meteoradar, 2 = APRS station, 3 = settings.
+enum { SCREEN_PLANES = 0, SCREEN_METEO = 1, SCREEN_APRS = 2, SCREEN_SETTINGS = 3,
+       SCREEN_COUNT = 4 };
 static int s_screen = SCREEN_PLANES;
+
+// Automatic screen cycling. When enabled (Settings_AutoSwitchMin() > 0) the radar
+// screens rotate on their own. Any touch pauses the cycling for a fixed window so
+// the user can look at / operate a screen (and reach the settings) in peace.
+static const unsigned long AUTOSWITCH_PAUSE_MS = 10UL * 60UL * 1000UL;  // 10 min
+static unsigned long s_lastSwitchMs = 0;   // last automatic switch
+static unsigned long s_lastTouchMs  = 0;   // last touch -> start of the pause
+static bool          s_hasTouched   = false;
 
 // Screen indicator - dots near the top edge (inside the circle).
 static void drawScreenDots() {
@@ -140,6 +152,7 @@ static void drawActive() {
   switch (s_screen) {
     case SCREEN_PLANES:   ScreenPlanes_Draw();   break;
     case SCREEN_METEO:    ScreenWeather_Draw();  break;
+    case SCREEN_APRS:     ScreenAPRS_Draw();     break;
     case SCREEN_SETTINGS: ScreenSettings_Draw(); break;
   }
   drawScreenDots();
@@ -150,6 +163,7 @@ static void enterActive() {
   switch (s_screen) {
     case SCREEN_PLANES:   ScreenPlanes_Enter();   break;
     case SCREEN_METEO:    ScreenWeather_Enter();  break;
+    case SCREEN_APRS:     ScreenAPRS_Enter();     break;
     case SCREEN_SETTINGS: ScreenSettings_Enter(); break;
   }
   drawActive();
@@ -158,17 +172,23 @@ static void enterActive() {
 // Long press switches screens by direction: dir -1 = previous, +1 = next.
 // Wraps around so both sides always do something (the dots at the top show
 // where you are).
-static void switchScreen(int dir) {
-  s_screen = (s_screen + dir + SCREEN_COUNT) % SCREEN_COUNT;
+static void gotoScreen(int idx) {
+  s_screen = idx;
   Settings_SetScreen(s_screen);           // remember across restarts (debounced)
   Serial.printf("Screen: %d\n", s_screen);
   enterActive();
+  s_lastSwitchMs = millis();              // reset the auto-cycle interval
+}
+
+static void switchScreen(int dir) {
+  gotoScreen((s_screen + dir + SCREEN_COUNT) % SCREEN_COUNT);
 }
 
 static bool activeTick() {
   switch (s_screen) {
     case SCREEN_PLANES:   return ScreenPlanes_Tick();
     case SCREEN_METEO:    return ScreenWeather_Tick();
+    case SCREEN_APRS:     return ScreenAPRS_Tick();
     case SCREEN_SETTINGS: return ScreenSettings_Tick();
   }
   return false;
@@ -179,6 +199,7 @@ static void activeChangeRange(int dir) {
   switch (s_screen) {
     case SCREEN_PLANES: ScreenPlanes_ChangeRange(dir);  break;
     case SCREEN_METEO:  ScreenWeather_ChangeRange(dir); break;
+    case SCREEN_APRS:   ScreenAPRS_ChangeRange(dir);    break;
     default: break;   // settings has no range
   }
 }
@@ -213,17 +234,18 @@ static const char* resetReasonText() {
   }
 }
 
-// NOTE: there is deliberately NO clock in this firmware. Nothing needs one:
-// the HH:MM under each weather frame is derived from that frame's own name
-// (CHMU.cpp), the "nyni / -X min" label from the frame's position in the
-// animation, and every HTTPS connection uses setInsecure(), so no certificate
-// validity is checked either. NTP was dropped in 0.5.3 - if a wall clock is
-// ever added to the UI, put configTzTime() back here.
+// The weather screen needs no clock (its HH:MM comes from each frame's own name
+// in CHMU.cpp), but the APRS screen does: it shows how old a station's last
+// position is, and "we have current data" is the whole point. So SNTP is started
+// once WiFi is up (see setup()). It is non-blocking - time() simply becomes
+// valid a few seconds later, and every HTTPS connection still uses setInsecure()
+// so no certificate validity is checked.
 //
-// The time ZONE still has to be set up though. CHMU.cpp converts each frame's
-// UTC timestamp with localtime_r(), and without TZ in the environment that
-// would quietly hand back UTC - the labels would be an hour or two out. This
-// used to be a side effect of configTzTime(); now it is done explicitly.
+// applyTimezone() runs first and independently: CHMU.cpp converts each frame's
+// UTC timestamp with localtime_r(), and without TZ in the environment that would
+// quietly hand back UTC - the labels would be an hour or two out. This has to
+// hold even before (or without) an NTP sync, so the TZ is set here explicitly;
+// configTzTime() later sets the same TZ again and adds the servers.
 static void applyTimezone() {
   setenv("TZ", TZ_INFO, 1);
   tzset();
@@ -237,6 +259,19 @@ void setup() {
   // reset means something crashed, a brownout points at the power supply.
   Serial.printf("Duvod restartu: %s\n", resetReasonText());
   Serial.printf("Volna pamet: %u B\n", (unsigned)ESP.getFreeHeap());
+
+  // ST7701 cold-start fix. On a raw power-on the RGB panel occasionally comes up
+  // split into two halves; a warm reset always brings it up cleanly (the LCD
+  // supply is held by the TCA9554 across a reset, so the panel stays powered).
+  // Rather than chase a fragile init-timing race, reboot ONCE on a cold power-on
+  // so the panel is always initialised on that reliable warm path. This runs
+  // before the display is touched (no split is ever shown), costs a fraction of
+  // a second, and cannot loop: the reboot's reset reason is no longer POWERON.
+  if (esp_reset_reason() == ESP_RST_POWERON) {
+    Serial.println("Studeny start - reboot pro spolehlivy nabeh displeje");
+    Serial.flush();
+    esp_restart();
+  }
 
   Settings_Begin();
   applyTimezone();   // needed for the weather frame labels, not for a clock
@@ -288,9 +323,15 @@ void setup() {
   checkBootReset();
 
   ADSB_SetPollFn(netPoll);
+  APRS_SetPollFn(netPoll);
   CHMU_SetPollFn(netPoll);
 
   WiFi_ConnectOrPortal();
+
+  // Start SNTP (TZ was already set by applyTimezone). Non-blocking: the network
+  // stack is up now, time() turns valid once a server answers. Used by the APRS
+  // screen to show how fresh a station's last position is.
+  configTzTime(TZ_INFO, "pool.ntp.org", "time.google.com", "time.cloudflare.com");
 
   if (WiFi_IsConnected()) {
     GeoIP_DetectIfNeeded();   // fill in the location by IP if the user did not set one
@@ -375,6 +416,7 @@ void loop() {
     }
     lastX = t.x; lastY = t.y;        // last valid position
     lastSeenMs = millis();
+    s_lastTouchMs = millis(); s_hasTouched = true;   // pause auto-cycling
   } else if (touching && millis() - lastSeenMs >= TOUCH_RELEASE_MS) {
     touching = false;                // finger really is up -> evaluate
     int dx = lastX - startX;
@@ -446,6 +488,21 @@ void loop() {
   if (millis() - lastExio >= EXPANDER_CHECK_MS) {
     lastExio = millis();
     TCA9554_Verify();
+  }
+
+  // Automatic screen cycling: rotate the radar screens (ADSB / meteo / APRS only,
+  // settings is skipped) every N minutes, unless a recent touch has paused it.
+  uint8_t autoMin = Settings_AutoSwitchMin();
+  if (autoMin > 0) {
+    unsigned long now = millis();
+    bool paused = s_hasTouched && (now - s_lastTouchMs < AUTOSWITCH_PAUSE_MS);
+    if (paused) {
+      s_lastSwitchMs = now;            // hold the interval for the whole pause
+    } else if (now - s_lastSwitchMs >= (unsigned long)autoMin * 60000UL) {
+      int next = s_screen + 1;         // cycle 0 -> 1 -> 2 -> 0
+      if (next > SCREEN_APRS) next = SCREEN_PLANES;   // skip settings (3)
+      gotoScreen(next);
+    }
   }
 
   displayWatchdog();

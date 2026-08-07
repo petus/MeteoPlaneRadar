@@ -14,6 +14,7 @@
 //  the animation never tears. "Nacitam animaci..." is shown while downloading.
 //
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
+//           Ondra OK1CDJ / apps.ok1cdj.com
 //  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
 // =============================================================================
 #include "ScreenWeather.h"
@@ -104,10 +105,10 @@ static void borderProject(float lat, float lon, int* sx, int* sy) {
   *sy = (int)((int64_t)(srcY - s_crop.y1) * LCD_HEIGHT / cropH());
 }
 
-static int pngDraw(PNGDRAW* d) {
+static void pngDraw(PNGDRAW* d) {
   int srcY = d->y;
-  if (srcY < s_crop.y1 || srcY > s_crop.y2) return 1;
-  if (!s_crop565 || !s_lineBuf) return 1;
+  if (srcY < s_crop.y1 || srcY > s_crop.y2) return;
+  if (!s_crop565 || !s_lineBuf) return;
   png.getLineAsRGB565(d, s_lineBuf, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
   const int cw = cropW();
   uint16_t* row = s_crop565 + (int64_t)(srcY - s_crop.y1) * cw;
@@ -116,7 +117,6 @@ static int pngDraw(PNGDRAW* d) {
     // Outside the data area (title on top, scale on the right in the PNG) = black.
     row[i] = (srcX > s_dataX1 || srcY < s_dataY0) ? 0x0000 : s_lineBuf[srcX];
   }
-  return 1;
 }
 
 // Stretch the current crop (s_crop565) over the display, masked to the circle
