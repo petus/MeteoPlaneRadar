@@ -11,6 +11,22 @@ pohromadě v `src/Config.h`.
 
 ---
 
+## [0.7.0]
+
+### Přidáno
+- **Automatické přepínání obrazovek po nastaveném čase.** Na obrazovce Nastavení
+  přibyl řádek „Auto min" s tlačítky `[-] hodnota [+]` (stejný ovládací vzor jako
+  u natočení mapy). Interval je 0–9 minut, `Vyp` (0) je výchozí a znamená, že se
+  obrazovky samy nepřepínají.
+  - Cyklí se jen radarové obrazovky **ADSB → RADAR → APRS** (Nastavení se
+    přeskakuje).
+  - **Jakýkoli dotyk** cyklení pozastaví na 10 minut a nechá aktuální obrazovku;
+    během pauzy funguje normální ruční přepínání dlouhým stiskem, takže se lze
+    dostat i do Nastavení. Po 10 minutách bez dotyku se cyklení zase rozjede.
+  - Nastavená hodnota se ukládá do NVS jako ostatní nastavení.
+
+---
+
 ## [0.6.2]
 
 ### Opraveno

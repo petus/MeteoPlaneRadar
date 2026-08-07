@@ -27,6 +27,7 @@ static uint8_t s_rngM = 1;              // meteo range index (50 km default)
 static uint8_t s_rngA = 2;              // APRS range index (100 km default)
 static uint8_t s_scr  = 0;              // active screen (0 = planes)
 static uint16_t s_top = 0;              // bearing shown at the top (0 = north up)
+static uint8_t s_autoMin = 0;           // auto screen switch: 0 = off, 1..9 minutes
 static bool          s_uiDirty   = false;
 static unsigned long s_uiDirtyAt = 0;
 
@@ -46,6 +47,7 @@ void Settings_Begin() {
     s_rngA   = prefs.getUChar("rngA", 2);
     s_scr    = prefs.getUChar("scr", 0);
     s_top    = prefs.getUShort("topb", 0);   // new key: old "rot" meant something else
+    s_autoMin = prefs.getUChar("autoMin", 0);
     prefs.getString("aprsCall", s_aprsCall, sizeof(s_aprsCall));
     prefs.getString("aprsKey",  s_aprsKey,  sizeof(s_aprsKey));
     prefs.end();
@@ -123,6 +125,12 @@ void    Settings_SetScreen(uint8_t idx) {
   if (idx != s_scr) { s_scr = idx; s_uiDirty = true; s_uiDirtyAt = millis(); }
 }
 
+uint8_t Settings_AutoSwitchMin() { return s_autoMin; }
+void    Settings_SetAutoSwitchMin(uint8_t m) {
+  if (m > 9) m = 9;
+  if (m != s_autoMin) { s_autoMin = m; s_uiDirty = true; s_uiDirtyAt = millis(); }
+}
+
 // Debounced flush: write only after the UI has been idle for a moment, so a
 // burst of swipes (or a drag across the brightness slider) results in a single
 // NVS write instead of one per step.
@@ -136,6 +144,7 @@ void Settings_Tick() {
     prefs.putUChar("scr",  s_scr);
     prefs.putUShort("topb", s_top);
     prefs.putUChar("bl",   s_bl);
+    prefs.putUChar("autoMin", s_autoMin);
     prefs.end();
   }
   s_uiDirty = false;
@@ -145,6 +154,7 @@ void Settings_ClearAll() {
   if (prefs.begin(NS, false)) { prefs.clear(); prefs.end(); }
   s_lat = DEFAULT_LAT; s_lon = DEFAULT_LON; s_hasLoc = false; s_bl = 80;
   s_metric = false;
-  s_rngP = 1; s_rngM = 1; s_rngA = 2; s_scr = 0; s_top = 0; s_uiDirty = false;
+  s_rngP = 1; s_rngM = 1; s_rngA = 2; s_scr = 0; s_top = 0; s_autoMin = 0;
+  s_uiDirty = false;
   s_aprsCall[0] = '\0'; s_aprsKey[0] = '\0';
 }

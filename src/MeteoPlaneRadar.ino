@@ -127,6 +127,14 @@ enum { SCREEN_PLANES = 0, SCREEN_METEO = 1, SCREEN_APRS = 2, SCREEN_SETTINGS = 3
        SCREEN_COUNT = 4 };
 static int s_screen = SCREEN_PLANES;
 
+// Automatic screen cycling. When enabled (Settings_AutoSwitchMin() > 0) the radar
+// screens rotate on their own. Any touch pauses the cycling for a fixed window so
+// the user can look at / operate a screen (and reach the settings) in peace.
+static const unsigned long AUTOSWITCH_PAUSE_MS = 10UL * 60UL * 1000UL;  // 10 min
+static unsigned long s_lastSwitchMs = 0;   // last automatic switch
+static unsigned long s_lastTouchMs  = 0;   // last touch -> start of the pause
+static bool          s_hasTouched   = false;
+
 // Screen indicator - dots near the top edge (inside the circle).
 static void drawScreenDots() {
   int gap = 20;
@@ -164,11 +172,16 @@ static void enterActive() {
 // Long press switches screens by direction: dir -1 = previous, +1 = next.
 // Wraps around so both sides always do something (the dots at the top show
 // where you are).
-static void switchScreen(int dir) {
-  s_screen = (s_screen + dir + SCREEN_COUNT) % SCREEN_COUNT;
+static void gotoScreen(int idx) {
+  s_screen = idx;
   Settings_SetScreen(s_screen);           // remember across restarts (debounced)
   Serial.printf("Screen: %d\n", s_screen);
   enterActive();
+  s_lastSwitchMs = millis();              // reset the auto-cycle interval
+}
+
+static void switchScreen(int dir) {
+  gotoScreen((s_screen + dir + SCREEN_COUNT) % SCREEN_COUNT);
 }
 
 static bool activeTick() {
@@ -403,6 +416,7 @@ void loop() {
     }
     lastX = t.x; lastY = t.y;        // last valid position
     lastSeenMs = millis();
+    s_lastTouchMs = millis(); s_hasTouched = true;   // pause auto-cycling
   } else if (touching && millis() - lastSeenMs >= TOUCH_RELEASE_MS) {
     touching = false;                // finger really is up -> evaluate
     int dx = lastX - startX;
@@ -474,6 +488,21 @@ void loop() {
   if (millis() - lastExio >= EXPANDER_CHECK_MS) {
     lastExio = millis();
     TCA9554_Verify();
+  }
+
+  // Automatic screen cycling: rotate the radar screens (ADSB / meteo / APRS only,
+  // settings is skipped) every N minutes, unless a recent touch has paused it.
+  uint8_t autoMin = Settings_AutoSwitchMin();
+  if (autoMin > 0) {
+    unsigned long now = millis();
+    bool paused = s_hasTouched && (now - s_lastTouchMs < AUTOSWITCH_PAUSE_MS);
+    if (paused) {
+      s_lastSwitchMs = now;            // hold the interval for the whole pause
+    } else if (now - s_lastSwitchMs >= (unsigned long)autoMin * 60000UL) {
+      int next = s_screen + 1;         // cycle 0 -> 1 -> 2 -> 0
+      if (next > SCREEN_APRS) next = SCREEN_PLANES;   // skip settings (3)
+      gotoScreen(next);
+    }
   }
 
   displayWatchdog();

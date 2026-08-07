@@ -50,6 +50,10 @@ void        Settings_SetAprsKey(const char* key);
 uint16_t Settings_TopBearing();
 void     Settings_SetTopBearing(uint16_t deg);
 
+// Automatické cyklické přepínání obrazovek: 0 = vypnuto, 1..9 = interval v minutách.
+uint8_t Settings_AutoSwitchMin();
+void    Settings_SetAutoSwitchMin(uint8_t mins);
+
 // Call once per loop(); flushes pending UI-state changes to NVS after a short
 // idle delay (so a swipe does not trigger a flash write every time).
 void    Settings_Tick();
