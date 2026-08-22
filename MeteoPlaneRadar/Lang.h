@@ -76,7 +76,7 @@
   X(S_LON_LABEL,     "Zemepisna delka",    "Zeměpisná délka",       "Zemepisna dlzka",       "Zemepisná dĺžka",       "Longitude")
 
 enum StrId : uint16_t {
-// Všimni si, že tu musí byť presne toľko premenných, koľko je stĺpcov v X makre vyššie
+
 #define X(id, cz, czw, sk, skw, en) id,
   LANG_STRINGS(X)
 #undef X
