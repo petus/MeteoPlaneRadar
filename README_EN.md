@@ -1,8 +1,8 @@
 # MeteoPlaneRadar
 
 **A clock, live aircraft radar, precipitation radar and weather forecast on a
-round touchscreen.** Runs on a single Waveshare ESP32-S3-Touch-LCD-2.1 board and
-is configured from a browser.
+round touchscreen.** Runs on a single Waveshare ESP32-S3-Touch-LCD-2.1 or
+ESP32-S3-Touch-LCD-2.8C board and is configured from a browser.
 
 > Built by **[chiptron.cz](https://chiptron.cz)** with Claude AI.
 > Czech version of this document: [README.md](README.md)
@@ -139,9 +139,17 @@ elsewhere.
 
 ## Hardware
 
-**Waveshare ESP32-S3-Touch-LCD-2.1** — ESP32-S3R8 (8 MB PSRAM, 16 MB flash),
-round 480×480 IPS display with an ST7701 controller, CST820 capacitive touch,
-TCA9554 I/O expander. One board and a USB-C cable; nothing to solder or wire.
+**Waveshare ESP32-S3-Touch-LCD-2.1** or **ESP32-S3-Touch-LCD-2.8C** — ESP32-S3R8
+(8 MB PSRAM, 16 MB flash), round 480×480 IPS display with an ST7701 controller,
+TCA9554 I/O expander. Touch is a CST820 on the 2.1 and a GT911 on the 2.8C.
+One board and a USB-C cable; nothing to solder or wire.
+
+The two boards are pin-for-pin identical and **one binary runs on both** — at
+boot the firmware asks the touch controller who it is and picks the panel init
+sequence and the timing from the answer. Which board it settled on is in the
+serial log at startup and in the status table in the browser. If it ever gets it
+wrong on your board (a dead touch controller, most likely), `BOARD_FORCE` in
+`Config.h` pins it down.
 
 ## First run
 
@@ -287,6 +295,13 @@ adsb.fi APIs are for non-commercial use only. LICENSE.txt has the details —
 Beyond what the licence requires: if you build on this, I would be glad if you
 kept the **chiptron.cz** credit on the settings screen. A request, not a
 condition.
+
+## Contributors
+
+- **[Pájeníčko.cz](https://pajenicko.cz)**
+  - **Support for the Waveshare ESP32-S3-Touch-LCD-2.8C.** The board is
+    identified at boot from its touch controller, so one binary runs on both
+    the 2.1 and the 2.8C and nobody has to pick which file to flash.
 
 ## Built on
 

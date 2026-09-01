@@ -27,6 +27,7 @@
 #include <ArduinoJson.h>
 #include <Update.h>
 #include <esp_heap_caps.h>
+#include "Board.h"
 #include <esp_system.h>
 #include <math.h>
 
@@ -186,6 +187,10 @@ static void handleRange() {
 static void handleStatus() {
   JsonDocument doc;
   doc["version"] = FW_VERSION;
+  // Which panel the firmware decided it is running on. One binary serves both
+  // boards, so this is the first thing to ask about when a bug report says the
+  // picture rolls or the touch is dead. A "?" means detection fell back.
+  doc["board"] = Board_Detected() ? Board_Name() : "? -> " + String(Board_Name());
   doc["ip"]   = s_apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
   doc["ssid"] = s_apMode ? String(AP_SSID) : WiFi.SSID();
   doc["rssi"] = s_apMode ? 0 : WiFi.RSSI();

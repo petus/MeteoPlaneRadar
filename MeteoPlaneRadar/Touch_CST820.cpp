@@ -23,6 +23,13 @@ static bool readRegs(uint8_t reg, uint8_t* buf, size_t len) {
   return true;
 }
 
+// Register 0xA7 is the chip ID. Reading it is the whole probe: on this bus only
+// the CST820 lives at 0x15, so an answer there settles which board we are on.
+bool CST820_Probe() {
+  uint8_t id = 0;
+  return readRegs(0xA7, &id, 1);
+}
+
 // --- INT line --------------------------------------------------------------
 // The controller pulls INT low when it has a touch report ready. Reading the
 // registers at any other time gives stale or garbage data - and once the chip
@@ -35,7 +42,9 @@ static unsigned long s_lastPoll = 0;
 
 static void IRAM_ATTR onTouchInt() { s_intFlag = true; }
 
-bool Touch_Init() {
+static bool s_intAttached = false;
+
+bool CST820_Init() {
   // Reset via EXIO2.
   TCA9554_SetPin(EXIO_TOUCH_RST, false);
   delay(10);
@@ -44,9 +53,12 @@ bool Touch_Init() {
 
   pinMode(CST820_INT_PIN, INPUT_PULLUP);
 #if TOUCH_USE_INT
-  // detachInterrupt first - Touch_Init() may be called again at runtime.
-  detachInterrupt(digitalPinToInterrupt(CST820_INT_PIN));
+  // Only detach what we actually attached - Touch_Init() may be called again at
+  // runtime, but on the first call there is no handler yet and asking the GPIO
+  // driver to remove one it never installed just prints a complaint.
+  if (s_intAttached) detachInterrupt(digitalPinToInterrupt(CST820_INT_PIN));
   attachInterrupt(digitalPinToInterrupt(CST820_INT_PIN), onTouchInt, FALLING);
+  s_intAttached = true;
   s_intFlag = false;
   s_fingerDown = false;
 #endif
@@ -69,7 +81,7 @@ bool Touch_Init() {
 // and with it the only code that wrote to the I/O expander at runtime - which
 // is what could switch the display off for good.
 
-void Touch_Read(TouchData* out) {
+void CST820_Read(TouchData* out) {
   out->points = 0;
 
 #if TOUCH_USE_INT

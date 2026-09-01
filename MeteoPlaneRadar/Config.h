@@ -10,7 +10,8 @@
 //  Project: MeteoPlaneRadar - live aircraft radar on a round touchscreen
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
 //  Web:     https://chiptron.cz
-//  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
+//  Boards:  Waveshare ESP32-S3-Touch-LCD-2.1  and  ESP32-S3-Touch-LCD-2.8C
+//           (both round 480x480, ST7701; told apart at boot - see BOARD_FORCE)
 // =============================================================================
 #pragma once
 #include "Version.h"   // FW_VERSION - jde do hlavicky User-Agent nize
@@ -21,6 +22,29 @@
 #define I2C_SDA   15
 #define I2C_SCL   7
 #define BOOT_PIN  0        // hold at power-up (~3 s) = factory reset
+
+// ---------------------------------------------------------------------------
+//  Which board?
+//
+//  The 2.1 and the 2.8C are pin-for-pin identical - same RGB lines, same I2C,
+//  same expander, same backlight - and differ only in the ST7701 register
+//  sequence, the vertical timing and the touch controller. So one binary runs
+//  on both and works out which it is at boot, by asking the touch controller
+//  who it is (CST820 at 0x15 = 2.1, GT911 at 0x5D = 2.8C). See Board.h.
+//
+//  0  = detect at boot (leave it here)
+//  21 = always the 2.1
+//  28 = always the 2.8C
+//
+//  Force it only if the detection gets it wrong on your board - a dead touch
+//  controller would otherwise leave you on BOARD_FALLBACK, which for the wrong
+//  board means a rolling or blank picture rather than merely no touch.
+// ---------------------------------------------------------------------------
+#define BOARD_FORCE 0
+
+// Which board to assume when nothing answers on I2C. The 2.1 is the original
+// target and by far the more common of the two.
+#define BOARD_FALLBACK BOARD_LCD_2_1
 
 // ---------------------------------------------------------------------------
 //  Time zone (POSIX TZ string)
@@ -130,8 +154,8 @@
 // ---------------------------------------------------------------------------
 //  Touch
 // ---------------------------------------------------------------------------
-// The CST820 drops the odd sample in the middle of a drag, and a failed I2C
-// read is thrown away for the same reason (see Touch_CST820.cpp). Ending the
+// Both controllers drop the odd sample in the middle of a drag, and a failed
+// I2C read is thrown away for the same reason (see Touch_*.cpp). Ending the
 // gesture on the first empty sample would turn one swipe into several bogus
 // taps - so require this much continuous silence before accepting that the
 // finger is really up. Real gestures last 40 ms and up, so 60 ms costs nothing.
@@ -139,9 +163,11 @@
 
 // 1 = only read the controller when it says it has something to report.
 //
-// The CST820 signals a touch event by pulling INT low; reading the registers at
-// any other moment returns stale or garbage data, and the chip also puts itself
-// into standby when nothing is happening, where it may not answer at all. We
+// Both controllers signal a touch event by pulling INT low; reading the
+// registers at any other moment returns stale or garbage data (on the GT911 it
+// is the previous report, which it will not refresh until the ready flag is
+// cleared), and either chip puts itself into standby when nothing is
+// happening, where it may not answer at all. We
 // used to poll it every few milliseconds regardless - which is where the all
 // 0xFF samples came from. The pin is watched by an interrupt (a level check
 // would miss the pulse while a frame is being drawn), and there is still a slow
