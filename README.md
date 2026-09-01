@@ -171,6 +171,7 @@ Jen pro osobní nekomerční použití — respektujte podmínky poskytovatelů.
   - **Podpora desky Waveshare ESP32-S3-Touch-LCD-2.8C.** Deska se pozná při
     startu podle dotykového řadiče, takže jedna binárka běží na 2.1 i na 2.8C
     a nikdo nemusí vybírat, který soubor nahrát.
+  - **Legendu na meteoradaru jde skrýt** — přepínač ve webovém nastavení.
 
 ## Z čeho projekt vychází
 

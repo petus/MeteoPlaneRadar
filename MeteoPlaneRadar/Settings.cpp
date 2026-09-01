@@ -40,6 +40,7 @@ static uint8_t s_scrMask = (1 << SCREEN_CLOCK_I) | (1 << SCREEN_PLANES_I) |
                            (1 << SCREEN_METEO_I) | (1 << SCREEN_FORECAST_I);
 static uint16_t s_autoRot = 0;
 static uint8_t s_radarSrc = RADAR_SRC_CHMU;
+static bool    s_mtLegend = true;
 
 // --- Clock appearance ---
 static uint8_t  s_secStyle = SEC_STYLE_DOTS;
@@ -105,6 +106,7 @@ void Settings_Begin() {
       migrateRotate = true;          // written below, the handle is read-only here
     }
     s_radarSrc = prefs.getUChar("radSrc", RADAR_SRC_CHMU);
+    s_mtLegend = prefs.getBool("mtLeg", true);
     s_secStyle = prefs.getUChar("secSt", SEC_STYLE_DOTS);
     s_clockCol = prefs.getUShort("clkC", 0xFFFF);
     s_secCol   = prefs.getUShort("secC", 0x05FF);
@@ -242,6 +244,9 @@ void    Settings_SetRadarSource(uint8_t s) {
   putU8("radSrc", s_radarSrc);
 }
 
+bool Settings_MeteoLegend() { return s_mtLegend; }
+void Settings_SetMeteoLegend(bool on) { s_mtLegend = on; putBool("mtLeg", on); }
+
 // --- Clock appearance -------------------------------------------------------
 uint8_t  Settings_SecondsStyle() { return s_secStyle; }
 void     Settings_SetSecondsStyle(uint8_t s) { if (s > SEC_STYLE_COMET) s = 0; s_secStyle = s; putU8("secSt", s); }
@@ -329,6 +334,7 @@ void Settings_ToJson(JsonObject o) {
   o["nightAuto"] = s_nightAuto;
   o["nightOffset"] = s_nightOff;
   o["radarSrc"] = s_radarSrc;
+  o["meteoLegend"] = s_mtLegend;
   o["autoRotate"] = s_autoRot;   // seconds
   o["topBearing"] = s_top;
   o["secStyle"] = s_secStyle;
@@ -370,6 +376,7 @@ bool Settings_FromJson(JsonObjectConst in) {
   setIf("nightAuto",    [](JsonVariantConst v){ Settings_SetNightAuto(v.as<bool>()); });
   setIf("nightOffset",  [](JsonVariantConst v){ Settings_SetNightOffsetMin(v.as<int8_t>()); });
   setIf("radarSrc",     [](JsonVariantConst v){ Settings_SetRadarSource(v.as<uint8_t>()); });
+  setIf("meteoLegend",  [](JsonVariantConst v){ Settings_SetMeteoLegend(v.as<bool>()); });
   setIf("autoRotate",   [](JsonVariantConst v){ Settings_SetAutoRotateSec(v.as<uint16_t>()); });
   setIf("topBearing",   [](JsonVariantConst v){ Settings_SetTopBearing(v.as<uint16_t>()); });
   setIf("secStyle",     [](JsonVariantConst v){ Settings_SetSecondsStyle(v.as<uint8_t>()); });
@@ -425,7 +432,7 @@ void Settings_ClearAll() {
   s_metric = false; s_lang = LANG_CZ; Lang_Set(s_lang);
   s_scrMask = (1 << SCREEN_CLOCK_I) | (1 << SCREEN_PLANES_I) |
               (1 << SCREEN_METEO_I) | (1 << SCREEN_FORECAST_I);
-  s_autoRot = 0; s_radarSrc = RADAR_SRC_CHMU;
+  s_autoRot = 0; s_radarSrc = RADAR_SRC_CHMU; s_mtLegend = true;
   s_secStyle = SEC_STYLE_DOTS; s_clockCol = 0xFFFF; s_secCol = 0x05FF;
   s_altMin = 0; s_altMax = 60000; s_onlyCs = false; s_sqAlert = true; s_watch[0] = '\0';
   s_rngP = 1; s_rngM = 1; s_scr = SCREEN_PLANES_I; s_top = 0;

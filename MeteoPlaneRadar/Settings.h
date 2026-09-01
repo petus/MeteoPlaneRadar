@@ -76,6 +76,11 @@ void     Settings_SetAutoRotateSec(uint16_t s);
 // --- Weather radar ----------------------------------------------------------
 uint8_t Settings_RadarSource();            // RADAR_SRC_CHMU / RADAR_SRC_RAINVIEWER
 void    Settings_SetRadarSource(uint8_t s);
+// The dBZ / mm/h scale down the left of the weather screen. On by default: it
+// is what makes the colours mean anything. Off for those who know the scale by
+// heart and would rather see the map underneath it.
+bool    Settings_MeteoLegend();
+void    Settings_SetMeteoLegend(bool on);
 
 // --- Clock appearance -------------------------------------------------------
 uint8_t  Settings_SecondsStyle();          // SEC_STYLE_*

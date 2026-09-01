@@ -302,6 +302,7 @@ condition.
   - **Support for the Waveshare ESP32-S3-Touch-LCD-2.8C.** The board is
     identified at boot from its touch controller, so one binary runs on both
     the 2.1 and the 2.8C and nobody has to pick which file to flash.
+  - **The weather radar legend can be hidden** — a toggle in the web settings.
 
 ## Built on
 

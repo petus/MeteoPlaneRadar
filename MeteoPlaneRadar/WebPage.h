@@ -165,6 +165,8 @@ td:first-child{color:var(--mut);width:50%}
         <option value="1" data-i18n="srcRv">RainViewer (Evropa i svět)</option>
       </select></div>
     <p class="hint" data-i18n="radarHint">Mimo ČR nemá ČHMÚ data a obrazovka zůstane prázdná — použijte RainViewer.</p>
+    <div class="row"><label class="chk"><input type="checkbox" id="meteoLegend"><span data-i18n="mtLegend">Zobrazit legendu (dBZ / mm/h)</span></label></div>
+    <p class="hint" data-i18n="mtLegendHint">Legenda zabírá levý okraj mapy. Když stupnici znáte, dá se skrýt a je vidět víc území.</p>
   </div>
 </section>
 
@@ -260,6 +262,8 @@ const D={
   scrHint:"Vypnuté obrazovky se přeskakují. Nastavení je dostupné vždy.",autoRotate:"Automatické střídání (sekundy, 0 = vypnuto)",
   rotHint:"Střídání pozastaví přejetí prstem, dlouhý stisk nebo přepnutí z prohlížeče — na trojnásobek intervalu, pak pokračuje samo. Obyčejné klepnutí ho nezastaví, otevřený detail letadla ho drží. Na obrazovce Nastavení se nestřídá.",
   radar:"Meteoradar",radarSrc:"Zdroj dat",srcChmu:"ČHMÚ (ostřejší, jen ČR)",srcRv:"RainViewer (Evropa i svět)",
+  mtLegend:"Zobrazit legendu (dBZ / mm/h)",
+  mtLegendHint:"Legenda zabírá levý okraj mapy. Když stupnici znáte, dá se skrýt a je vidět víc území.",
   radarHint:"Mimo ČR nemá ČHMÚ data a obrazovka zůstane prázdná — použijte RainViewer.",
   brightness:"Jas",clockHdr:"Hodiny",
   briDay:"Denní jas",briNight:"Noční jas",nightAuto:"Přepínat automaticky podle slunce",
@@ -296,6 +300,8 @@ const D={
   scrHint:"Disabled screens are skipped. Settings is always reachable.",autoRotate:"Auto cycling (seconds, 0 = off)",
   rotHint:"Cycling is paused by a swipe, a long press or a switch from the browser - for three times the interval, then it resumes on its own. A plain tap does not stop it; an open aircraft detail holds it. It does not run on the Settings screen.",
   radar:"Weather radar",radarSrc:"Data source",srcChmu:"CHMU (sharper, Czechia only)",srcRv:"RainViewer (Europe and beyond)",
+  mtLegend:"Show the legend (dBZ / mm/h)",
+  mtLegendHint:"The legend takes up the left edge of the map. If you know the scale, hide it and see more ground.",
   radarHint:"Outside Czechia CHMU has no data and the screen stays blank — use RainViewer.",
   brightness:"Brightness",clockHdr:"Clock",
   briDay:"Day brightness",briNight:"Night brightness",nightAuto:"Switch automatically with the sun",
@@ -392,6 +398,7 @@ const AUTO = [
  ["altMax","change","altMax",e=>+e.value],
  ["onlyCallsign","change","onlyCallsign",e=>e.checked],
  ["squawkAlert","change","squawkAlert",e=>e.checked],
+ ["meteoLegend","change","meteoLegend",e=>e.checked],
  ["watch","change","watch",e=>e.value],
  ["autoRotate","change","autoRotate",e=>+e.value],
 ];
@@ -415,6 +422,7 @@ async function load(){
  $("sClock").checked=CFG.screens.clock;$("sPlanes").checked=CFG.screens.planes;
  $("sMeteo").checked=CFG.screens.meteo;$("sForecast").checked=CFG.screens.forecast;
  $("autoRotate").value=CFG.autoRotate;$("radarSrc").value=CFG.radarSrc;
+ $("meteoLegend").checked=CFG.meteoLegend;
  $("briDay").value=CFG.briDay;$("briNight").value=CFG.briNight;
  $("nightAuto").checked=CFG.nightAuto;$("nightOffset").value=CFG.nightOffset;
  $("secStyle").value=CFG.secStyle;$("metric").checked=CFG.metric;$("topBearing").value=CFG.topBearing;
@@ -455,6 +463,7 @@ function body(){return{lat:parseFloat($("lat").value),lon:parseFloat($("lon").va
  lang:parseInt($("uiLang").value),metric:$("metric").checked,
  briDay:+$("briDay").value,briNight:+$("briNight").value,nightAuto:$("nightAuto").checked,
  nightOffset:+$("nightOffset").value,radarSrc:+$("radarSrc").value,autoRotate:+$("autoRotate").value,
+ meteoLegend:$("meteoLegend").checked,
  topBearing:+$("topBearing").value,secStyle:+$("secStyle").value,
  clockColor:hexToRgb565($("clockColor").value),secColor:hexToRgb565($("secColor").value),
  altMin:+$("altMin").value,altMax:+$("altMax").value,onlyCallsign:$("onlyCallsign").checked,

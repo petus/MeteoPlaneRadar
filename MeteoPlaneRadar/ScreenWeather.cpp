@@ -335,7 +335,10 @@ static void drawOverlay() {
   }
 
   // Precipitation-intensity legend - dBZ / mm/h, on the left and vertically
-  // centred so it stays inside the circle.
+  // centred so it stays inside the circle. Can be turned off in the web UI:
+  // it covers a chunk of the map, and once you know the scale it is just in
+  // the way. The band it reserves in the layout goes with it (see
+  // ScreenWeather_Draw), so the city labels may then use that space.
   //
   // The palette must match the source on screen - the same yellow means 40 dBZ
   // on one scale and 35 on the other - so each brings its own table and says
@@ -343,7 +346,7 @@ static void drawOverlay() {
   // scheme their API offers, from their published dBZ table; the mm/h column is
   // the Marshall-Palmer conversion (Z = 200 R^1.6) that the CHMU scale also
   // uses, so both read alike.
-  {
+  if (Settings_MeteoLegend()) {
     static const uint16_t COL_CHMU[6] = { 0xA000, 0xF800, 0xFC20, 0xE6E0, 0x05E0, 0x001F };
     static const char*    LBL_CHMU[6] = { ">56 / >100", "52 / 65", "46 / 27",
                                           "40 / 12", "32 / 3.6", "20 / <1" };
@@ -571,8 +574,10 @@ void ScreenWeather_Draw() {
   Layout_ReserveBand(LY_NOTE - 2, 12);       // loading / stale note
   Layout_ReserveBand(LY_RANGE - 4, 24);
   Layout_ReserveBand(LY_RANGE_DOTS - 6, 12);
-  // The precipitation legend down the left-hand side.
-  Layout_Reserve(28, 140, 100, 22 + 6 * 13 + 6);
+  // The precipitation legend down the left-hand side. Not reserved when it is
+  // switched off - otherwise turning it off would free the pixels but still
+  // push the map labels away from them.
+  if (Settings_MeteoLegend()) Layout_Reserve(28, 140, 100, 22 + 6 * 13 + 6);
 
   const int have = srcCount();
   if (have == 0) {

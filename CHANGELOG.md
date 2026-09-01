@@ -11,6 +11,21 @@ pohromadě v `MeteoPlaneRadar/Config.h`.
 
 ---
 
+## [0.6.6]
+
+### Přidáno
+
+- **Legendu na meteoradaru jde skrýt.** Nové zaškrtávátko ve webovém nastavení,
+  v sekci Meteoradar pod výběrem zdroje dat; ve výchozím stavu je legenda
+  zapnutá jako dosud. Stupnice dBZ / mm/h zabírá levý okraj mapy, a kdo ji zná
+  zpaměti, uvidí po vypnutí víc území. Ptalo se na to víc lidí.
+
+  Vypnutím zmizí i pruh, který si legenda rezervovala v layoutu. Bez toho by se
+  sice pixely uvolnily, ale popisky měst by se tomu místu dál vyhýbaly a
+  vypnutí by nepřineslo vůbec nic.
+
+---
+
 ## [0.6.5]
 
 ### Přidáno
