@@ -66,9 +66,10 @@
 #include "esp_system.h"
 
 #include "TCA9554.h"
+#include "Board.h"
 #include "Display_ST7701.h"
 #include "Canvas16.h"
-#include "Touch_CST820.h"
+#include "Touch.h"
 #include "Settings.h"
 #include "Version.h"
 #include "Config.h"
@@ -144,10 +145,10 @@ static unsigned long s_lastPump = 0;
 
 // Read the touch and advance the gesture. Safe to call from inside a transfer.
 //
-// The gesture does NOT end on the first empty sample. The CST820 skips one now
-// and then, and Touch_Read() also throws away corrupted ones - an empty sample
-// mid-drag is normal, not a lifted finger. Ending there would split one swipe
-// into several taps on the map.
+// The gesture does NOT end on the first empty sample. Both controllers skip one
+// now and then, and Touch_Read() also throws away corrupted ones - an empty
+// sample mid-drag is normal, not a lifted finger. Ending there would split one
+// swipe into several taps on the map.
 static void touchPump() {
   // Throttle. Touch_Read() is cheap when nothing is happening, but with a
   // finger down it does an I2C transfer every call, and netPoll() can run
@@ -454,6 +455,11 @@ void setup() {
   TCA9554_Init();
   TCA9554_SetPin(EXIO_LCD_PWR, false);
   delay(10);
+
+  // Which of the two boards is this? Must happen here: it decides the ST7701
+  // register sequence and the vertical timing, so it has to be known before
+  // ST7701_Init(), and it is answered over I2C, which is up by now.
+  Board_Detect();
 
   Backlight_Init();
   // Backlight stays off for now. The panel powers up with random memory

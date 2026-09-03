@@ -1,8 +1,8 @@
 # MeteoPlaneRadar
 
 **Hodiny, radar letadel, srážkový meteoradar a předpověď počasí na kulatém
-dotykovém displeji.** Běží na desce Waveshare ESP32-S3-Touch-LCD-2.1 a nastavuje
-se z prohlížeče.
+dotykovém displeji.** Běží na deskách Waveshare ESP32-S3-Touch-LCD-2.1
+a ESP32-S3-Touch-LCD-2.8C a nastavuje se z prohlížeče.
 
 > Vyvíjí **[chiptron.cz](https://chiptron.cz)** a Claude AI.
 > English version: **[README_EN.md](README_EN.md)**
@@ -24,9 +24,16 @@ anglicky.
 
 ## Hardware
 
-**Waveshare ESP32-S3-Touch-LCD-2.1** — ESP32-S3R8 (8 MB PSRAM, 16 MB flash),
-kulatý displej 480×480 s řadičem ST7701, dotyk CST820, expandér TCA9554.
+**Waveshare ESP32-S3-Touch-LCD-2.1** nebo **ESP32-S3-Touch-LCD-2.8C** —
+ESP32-S3R8 (8 MB PSRAM, 16 MB flash), kulatý displej 480×480 s řadičem ST7701,
+expandér TCA9554. Dotyk je CST820 (2.1), respektive GT911 (2.8C).
 Stačí deska a USB-C kabel, nic se nepájí.
+
+Obě desky jsou pinově totožné a **jedna binárka běží na obou** — firmware se při
+startu zeptá dotykového řadiče, kdo je, a podle toho zvolí inicializaci panelu
+i časování. Na kterou desku se rozhodl, ukazuje sériový výpis při startu a
+stavová tabulka na webu. Kdyby to na vaší desce určilo špatně (typicky vadný
+dotykový řadič), dá se to napevno vnutit přes `BOARD_FORCE` v `Config.h`.
 
 ---
 
@@ -157,6 +164,14 @@ Jen pro osobní nekomerční použití — respektujte podmínky poskytovatelů.
 **poloha podle IP:** [ip-api.com](http://ip-api.com) ·
 **mapa:** hranice Natural Earth (public domain), města [GeoNames](https://www.geonames.org) (CC BY 4.0) ·
 **čas:** hlavička `Date` (bez NTP)
+
+## Přispěvatelé
+
+- **[Pájeníčko.cz](https://pajenicko.cz)**
+  - **Podpora desky Waveshare ESP32-S3-Touch-LCD-2.8C.** Deska se pozná při
+    startu podle dotykového řadiče, takže jedna binárka běží na 2.1 i na 2.8C
+    a nikdo nemusí vybírat, který soubor nahrát.
+  - **Legendu na meteoradaru jde skrýt** — přepínač ve webovém nastavení.
 
 ## Z čeho projekt vychází
 

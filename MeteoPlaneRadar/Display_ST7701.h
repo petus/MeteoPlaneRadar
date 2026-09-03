@@ -5,7 +5,10 @@
 //  Project: MeteoPlaneRadar - live aircraft radar on a round touchscreen
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
 //  Web:     https://chiptron.cz
-//  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
+//  Boards:  Waveshare ESP32-S3-Touch-LCD-2.1  and  ESP32-S3-Touch-LCD-2.8C
+//           Both are round 480x480 ST7701 panels on identical pins; they
+//           differ only in the register init sequence and the vertical
+//           timing below. Which one we are on comes from Board.h.
 // =============================================================================
 #pragma once
 #include <Arduino.h>
@@ -26,18 +29,32 @@
 #define LCD_WIDTH   480
 #define LCD_HEIGHT  480
 
-// --- RGB timing (from the Waveshare datasheet) ---
-// Pixel clock 8 MHz (NOT 16). This halves the DMA bandwidth demand on the PSRAM
-// bus so the display survives contention from network buffers / canvas flush
-// without random-pixel flicker or the image creeping upward. Verified fix taken
-// from the SatRadar project - do not raise it back to 16 MHz.
+// --- RGB timing ---
+// Pixel clock 8 MHz (NOT the 16/18 MHz the two vendor configs ask for). This
+// halves the DMA bandwidth demand on the PSRAM bus so the display survives
+// contention from network buffers / canvas flush without random-pixel flicker
+// or the image creeping upward. Verified fix taken from the SatRadar project -
+// do not raise it.
+//
+// One clock for both boards, on purpose. The 2.8C has a longer vertical back
+// porch, so at 8 MHz a frame there is 548 x 508 = 278384 clocks (34.8 ms)
+// against the 2.1's 548 x 499 = 273452 (34.2 ms) - near enough the same that
+// the ~34 ms a frame takes, which the display watchdog and FLUSH_DEBUG are both
+// written around, stays true on either.
 #define RGB_FREQ_HZ  (8 * 1000 * 1000)
+
+// Horizontal timing is identical on the two boards.
 #define RGB_HPW  8
 #define RGB_HBP  10
 #define RGB_HFP  50
-#define RGB_VPW  3
-#define RGB_VBP  8
-#define RGB_VFP  8
+
+// Vertical timing is not - this is the whole of the difference, and getting it
+// wrong shows up as a picture that rolls or sits offset by a few rows.
+#define RGB_VPW_2_1   3
+#define RGB_VBP_2_1   8
+#define RGB_VPW_2_8C  2
+#define RGB_VBP_2_8C  18
+#define RGB_VFP       8
 
 // --- RGB data pins (B0..B4, G0..G5, R0..R4) ---
 #define RGB_HSYNC 38

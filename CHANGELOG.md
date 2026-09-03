@@ -11,6 +11,87 @@ pohromadě v `MeteoPlaneRadar/Config.h`.
 
 ---
 
+## [0.6.6]
+
+### Přidáno
+
+- **Legendu na meteoradaru jde skrýt.** Nové zaškrtávátko ve webovém nastavení,
+  v sekci Meteoradar pod výběrem zdroje dat; ve výchozím stavu je legenda
+  zapnutá jako dosud. Stupnice dBZ / mm/h zabírá levý okraj mapy, a kdo ji zná
+  zpaměti, uvidí po vypnutí víc území. Ptalo se na to víc lidí.
+
+  Vypnutím zmizí i pruh, který si legenda rezervovala v layoutu. Bez toho by se
+  sice pixely uvolnily, ale popisky měst by se tomu místu dál vyhýbaly a
+  vypnutí by nepřineslo vůbec nic.
+
+---
+
+## [0.6.5]
+
+### Přidáno
+
+- **Podpora desky Waveshare ESP32-S3-Touch-LCD-2.8C.** Jedna binárka běží na
+  2.1 i na 2.8C — deska se pozná při startu, žádné dvě verze firmwaru a žádné
+  přepínání před kompilací. Podstatné je, že obě desky jsou pinově naprosto
+  totožné: stejných šestnáct RGB linek, stejné HSYNC/VSYNC/DE/PCLK, stejná
+  dvojice SPI pinů pro příkazy ST7701, stejné podsvícení, stejná I2C, stejný
+  expandér na 0x20 se stejným rozdělením EXIO i stejný pin INT dotyku. Liší se
+  jen tři věci a ani jedna z nich není pin:
+
+  1. inicializační sekvence registrů ST7701 (opravdu jiný panel — jiná gamma,
+     jiné napájecí registry, celý blok E0–ED jiný),
+  2. vertikální časování (VPW 3 / VBP 8 proti VPW 2 / VBP 18),
+  3. dotykový řadič (CST820 na 0x15 proti GT911 na 0x5D).
+
+  Protože nic nekoliduje elektricky, jde deska určit až za běhu. Rozhodčím je
+  dotykový řadič — jediná součástka, které se dá zeptat, kdo je, a dá se jí to
+  zeptat dřív, než se rozjede displej, tedy přesně ve chvíli, kdy odpověď
+  potřebujeme (`Board.h` / `Board.cpp`, voláno v `setup()` mezi `TCA9554_Init()`
+  a `ST7701_Init()`).
+
+  Pixel clock je i na 2.8C 8 MHz, ačkoli výrobce u ní uvádí 18 MHz — ze stejného
+  důvodu jako u 2.1 (zatížení sběrnice PSRAM). 2.8C má delší vertikální
+  zatemnění, takže snímek při 8 MHz vyjde na 548 × 508 = 278 384 taktů (34,8 ms)
+  proti 548 × 499 = 273 452 (34,2 ms) u 2.1 — dost blízko na to, aby ~34 ms na
+  snímek, kolem kterých je postavený hlídač displeje i `FLUSH_DEBUG`, platilo na
+  obou.
+
+- **Ovladač GT911** (`Touch_GT911.*`) vedle stávajícího CST820. Tvarovaný
+  záměrně stejně jako CST820: čtení řízené přerušením z INT, mlčení řadiče se
+  nepovažuje za poruchu, stejné kontroly rozumnosti vzorku. Na drátě jsou to
+  ale úplně jiné čipy — šestnáctibitové adresy registrů, příznak připravenosti
+  bufferu, který je nutné ručně mazat, pět bodů místo jednoho. Adresu si GT911
+  vybírá podle úrovně na INT při odchodu z resetu, takže je to jediné místo ve
+  firmwaru, kde ESP32 tento vodič na okamžik samo budí.
+
+- **`Touch.h`** — společné rozhraní (`TouchData`, `Touch_Init`, `Touch_Read`).
+  Zbytek skice o existenci dvou řadičů neví.
+
+- **`TOUCH_DEBUG` loguje i surová data z řadiče**, nejen rozpoznaná gesta:
+  frekvence čtení, stavový registr, úroveň INT, syrové bajty bodu a hlášku,
+  když se souřadnice zahodí jako mimo panel. Nejhorší případ u dotyku je ten,
+  kdy řadič na I2C odpovídá bezvadně, a přesto se nic neděje — na to je výpis
+  gest krátký, protože žádná nevzniknou. Surové bajty ukážou, kde se to láme.
+
+- **Deska ve webovém stavu.** `/api/status` a stavová tabulka v prohlížeči nově
+  ukazují, na jakou desku se firmware rozhodl. První věc, na kterou se ptát,
+  když hlášení mluví o ujíždějícím obrazu nebo mrtvém dotyku.
+
+- **`BOARD_FORCE` v `Config.h`** jako pojistka: `0` detekuje (výchozí), `21`
+  nebo `28` vnutí desku napevno. Užitečné, když je dotykový řadič vadný —
+  detekce by pak spadla na záložní desku a u té špatné to neznamená jen chybějící
+  dotyk, ale rovnou ujíždějící nebo prázdný obraz.
+
+### Opraveno
+
+- **Zmizela hláška `GPIO isr service is not installed` při startu.**
+  `detachInterrupt()` se v inicializaci dotyku volal dřív, než se vůbec nějaké
+  přerušení připojilo, a GPIO driver si na to stěžoval do sériového logu.
+  Odpojuje se nově jen to, co se opravdu připojilo. Týká se to i desky 2.1,
+  kde ta hláška byla odjakživa.
+
+---
+
 ## [0.6.4]
 
 ### Opraveno

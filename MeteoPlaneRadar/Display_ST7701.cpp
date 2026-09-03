@@ -5,10 +5,14 @@
 //  Project: MeteoPlaneRadar - live aircraft radar on a round touchscreen
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
 //  Web:     https://chiptron.cz
-//  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
+//  Boards:  Waveshare ESP32-S3-Touch-LCD-2.1  (ST7701 + CST820)
+//           Waveshare ESP32-S3-Touch-LCD-2.8C (ST7701 + GT911)
+//           Same pins, same resolution, different panel: the register
+//           sequence and the vertical timing are picked from Board_Model().
 // =============================================================================
 #include "Display_ST7701.h"
 #include "TCA9554.h"
+#include "Board.h"
 #include "Config.h"
 #include "driver/spi_master.h"
 #include "freertos/FreeRTOS.h"
@@ -67,8 +71,8 @@ static void ST7701_Reset() {
   vTaskDelay(pdMS_TO_TICKS(50));
 }
 
-// Register init sequence - exactly as in the proven Waveshare demo for this board.
-static void ST7701_SendInit() {
+// --- 2.1: register init sequence, exactly as in the proven Waveshare demo ----
+static void ST7701_SendInit_2_1() {
   ST7701_CS_En();
 
   ST7701_Cmd(0xFF); ST7701_Dat(0x77); ST7701_Dat(0x01); ST7701_Dat(0x00); ST7701_Dat(0x00); ST7701_Dat(0x10);
@@ -143,6 +147,95 @@ static void ST7701_SendInit() {
   ST7701_CS_Dis();
 }
 
+// --- 2.8C: a different panel, not a variation on the one above --------------
+// Transcribed from Waveshare's board support for the 2.8C (the vendor init in
+// esp-arduino-libs/ESP32_Display_Panel). Almost nothing carries over: the gamma
+// tables (B0/B1), the power settings (C1/C2, B0/B1/B5 on page 0x11) and the
+// whole E0-ED block are all different values, the 0x13 page is written first
+// rather than last, sleep-out comes before the pixel format instead of after,
+// and it ends with 0x35 (tearing effect on) where the 2.1 sends 0x20 (inversion
+// off). Do not try to merge the two - they only look alike.
+static void ST7701_SendInit_2_8C() {
+  ST7701_CS_En();
+
+  ST7701_Cmd(0xFF); ST7701_Dat(0x77); ST7701_Dat(0x01); ST7701_Dat(0x00); ST7701_Dat(0x00); ST7701_Dat(0x13);
+  ST7701_Cmd(0xEF); ST7701_Dat(0x08);
+
+  ST7701_Cmd(0xFF); ST7701_Dat(0x77); ST7701_Dat(0x01); ST7701_Dat(0x00); ST7701_Dat(0x00); ST7701_Dat(0x10);
+  ST7701_Cmd(0xC0); ST7701_Dat(0x3B); ST7701_Dat(0x00);
+  ST7701_Cmd(0xC1); ST7701_Dat(0x10); ST7701_Dat(0x0C);
+  ST7701_Cmd(0xC2); ST7701_Dat(0x07); ST7701_Dat(0x0A);
+  ST7701_Cmd(0xC7); ST7701_Dat(0x00);
+  ST7701_Cmd(0xCC); ST7701_Dat(0x10);
+  ST7701_Cmd(0xCD); ST7701_Dat(0x08);
+
+  ST7701_Cmd(0xB0);
+  ST7701_Dat(0x05); ST7701_Dat(0x12); ST7701_Dat(0x98); ST7701_Dat(0x0E); ST7701_Dat(0x0F); ST7701_Dat(0x07);
+  ST7701_Dat(0x07); ST7701_Dat(0x09); ST7701_Dat(0x09); ST7701_Dat(0x23); ST7701_Dat(0x05); ST7701_Dat(0x52);
+  ST7701_Dat(0x0F); ST7701_Dat(0x67); ST7701_Dat(0x2C); ST7701_Dat(0x11);
+
+  ST7701_Cmd(0xB1);
+  ST7701_Dat(0x0B); ST7701_Dat(0x11); ST7701_Dat(0x97); ST7701_Dat(0x0C); ST7701_Dat(0x12); ST7701_Dat(0x06);
+  ST7701_Dat(0x06); ST7701_Dat(0x08); ST7701_Dat(0x08); ST7701_Dat(0x22); ST7701_Dat(0x03); ST7701_Dat(0x51);
+  ST7701_Dat(0x11); ST7701_Dat(0x66); ST7701_Dat(0x2B); ST7701_Dat(0x0F);
+
+  ST7701_Cmd(0xFF); ST7701_Dat(0x77); ST7701_Dat(0x01); ST7701_Dat(0x00); ST7701_Dat(0x00); ST7701_Dat(0x11);
+  ST7701_Cmd(0xB0); ST7701_Dat(0x5D);
+  ST7701_Cmd(0xB1); ST7701_Dat(0x3E);
+  ST7701_Cmd(0xB2); ST7701_Dat(0x81);
+  ST7701_Cmd(0xB3); ST7701_Dat(0x80);
+  ST7701_Cmd(0xB5); ST7701_Dat(0x4E);
+  ST7701_Cmd(0xB7); ST7701_Dat(0x85);
+  ST7701_Cmd(0xB8); ST7701_Dat(0x20);
+  ST7701_Cmd(0xC1); ST7701_Dat(0x78);
+  ST7701_Cmd(0xC2); ST7701_Dat(0x78);
+  ST7701_Cmd(0xD0); ST7701_Dat(0x88);
+
+  ST7701_Cmd(0xE0); ST7701_Dat(0x00); ST7701_Dat(0x00); ST7701_Dat(0x02);
+  ST7701_Cmd(0xE1);
+  ST7701_Dat(0x06); ST7701_Dat(0x30); ST7701_Dat(0x08); ST7701_Dat(0x30); ST7701_Dat(0x05); ST7701_Dat(0x30);
+  ST7701_Dat(0x07); ST7701_Dat(0x30); ST7701_Dat(0x00); ST7701_Dat(0x33); ST7701_Dat(0x33);
+  ST7701_Cmd(0xE2);
+  ST7701_Dat(0x11); ST7701_Dat(0x11); ST7701_Dat(0x33); ST7701_Dat(0x33); ST7701_Dat(0xF4); ST7701_Dat(0x00);
+  ST7701_Dat(0x00); ST7701_Dat(0x00); ST7701_Dat(0xF4); ST7701_Dat(0x00); ST7701_Dat(0x00); ST7701_Dat(0x00);
+  ST7701_Cmd(0xE3); ST7701_Dat(0x00); ST7701_Dat(0x00); ST7701_Dat(0x11); ST7701_Dat(0x11);
+  ST7701_Cmd(0xE4); ST7701_Dat(0x44); ST7701_Dat(0x44);
+  ST7701_Cmd(0xE5);
+  ST7701_Dat(0x0D); ST7701_Dat(0xF5); ST7701_Dat(0x30); ST7701_Dat(0xF0); ST7701_Dat(0x0F); ST7701_Dat(0xF7);
+  ST7701_Dat(0x30); ST7701_Dat(0xF0); ST7701_Dat(0x09); ST7701_Dat(0xF1); ST7701_Dat(0x30); ST7701_Dat(0xF0);
+  ST7701_Dat(0x0B); ST7701_Dat(0xF3); ST7701_Dat(0x30); ST7701_Dat(0xF0);
+  ST7701_Cmd(0xE6); ST7701_Dat(0x00); ST7701_Dat(0x00); ST7701_Dat(0x11); ST7701_Dat(0x11);
+  ST7701_Cmd(0xE7); ST7701_Dat(0x44); ST7701_Dat(0x44);
+  ST7701_Cmd(0xE8);
+  ST7701_Dat(0x0C); ST7701_Dat(0xF4); ST7701_Dat(0x30); ST7701_Dat(0xF0); ST7701_Dat(0x0E); ST7701_Dat(0xF6);
+  ST7701_Dat(0x30); ST7701_Dat(0xF0); ST7701_Dat(0x08); ST7701_Dat(0xF0); ST7701_Dat(0x30); ST7701_Dat(0xF0);
+  ST7701_Dat(0x0A); ST7701_Dat(0xF2); ST7701_Dat(0x30); ST7701_Dat(0xF0);
+  ST7701_Cmd(0xE9); ST7701_Dat(0x36); ST7701_Dat(0x01);
+  ST7701_Cmd(0xEB);
+  ST7701_Dat(0x00); ST7701_Dat(0x01); ST7701_Dat(0xE4); ST7701_Dat(0xE4); ST7701_Dat(0x44); ST7701_Dat(0x88);
+  ST7701_Dat(0x40);
+  ST7701_Cmd(0xED);
+  ST7701_Dat(0xFF); ST7701_Dat(0x10); ST7701_Dat(0xAF); ST7701_Dat(0x76); ST7701_Dat(0x54); ST7701_Dat(0x2B);
+  ST7701_Dat(0xCF); ST7701_Dat(0xFF); ST7701_Dat(0xFF); ST7701_Dat(0xFC); ST7701_Dat(0xB2); ST7701_Dat(0x45);
+  ST7701_Dat(0x67); ST7701_Dat(0xFA); ST7701_Dat(0x01); ST7701_Dat(0xFF);
+  ST7701_Cmd(0xEF); ST7701_Dat(0x08); ST7701_Dat(0x08); ST7701_Dat(0x08); ST7701_Dat(0x45); ST7701_Dat(0x3F); ST7701_Dat(0x54);
+
+  ST7701_Cmd(0xFF); ST7701_Dat(0x77); ST7701_Dat(0x01); ST7701_Dat(0x00); ST7701_Dat(0x00); ST7701_Dat(0x00);
+
+  ST7701_Cmd(0x11);                      // sleep out
+  vTaskDelay(pdMS_TO_TICKS(120));
+  ST7701_Cmd(0x3A); ST7701_Dat(0x66);    // RGB666/565
+  ST7701_Cmd(0x36); ST7701_Dat(0x00);
+  ST7701_Cmd(0x35); ST7701_Dat(0x00);    // tearing effect line on
+  ST7701_Cmd(0x29);                      // display on
+  ST7701_CS_Dis();
+}
+
+static void ST7701_SendInit() {
+  if (Board_Model() == BOARD_LCD_2_8C) ST7701_SendInit_2_8C();
+  else                                 ST7701_SendInit_2_1();
+}
+
 bool ST7701_Init() {
   ST7701_Reset();
 
@@ -197,8 +290,9 @@ bool ST7701_Init() {
   rgb.timings.hsync_pulse_width = RGB_HPW;
   rgb.timings.hsync_back_porch  = RGB_HBP;
   rgb.timings.hsync_front_porch = RGB_HFP;
-  rgb.timings.vsync_pulse_width = RGB_VPW;
-  rgb.timings.vsync_back_porch  = RGB_VBP;
+  const bool is28c = (Board_Model() == BOARD_LCD_2_8C);
+  rgb.timings.vsync_pulse_width = is28c ? RGB_VPW_2_8C : RGB_VPW_2_1;
+  rgb.timings.vsync_back_porch  = is28c ? RGB_VBP_2_8C : RGB_VBP_2_1;
   rgb.timings.vsync_front_porch = RGB_VFP;
   rgb.timings.flags.pclk_active_neg = false;
   rgb.data_width = 16;
