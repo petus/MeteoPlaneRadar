@@ -8,6 +8,9 @@ a browser.
 > Built by **[chiptron.cz](https://chiptron.cz)** with Claude AI.
 > Czech version of this document: [README.md](README.md)
 
+> ![Obrazovky](https://github.com/petus/MeteoPlaneRadar/blob/main/obrazovky.png)
+
+
 ---
 
 ## Switch it to English
