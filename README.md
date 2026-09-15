@@ -31,10 +31,13 @@ nastavení) a dokud jsou vypnuté, zařízení si o jejich data vůbec neřekne.
 Zobrazená cena je **burzovní**, ne to, co platíte — vlastní přirážku a DPH
 si lze doplnit na záložce Energie, viz [CHANGELOG](CHANGELOG.md).
 
+> Líbí se ti tenhle projekt? Jdeš do něj? Je totiž kompletně zdarma. Podpořit mě ale můžeš, pokud chceš, tím, že mi koupíš kafe na **https://buymeacoffee.com/chiptroncz**
+
 ## Hardware
 
 **Waveshare ESP32-S3-Touch-LCD-2.1** nebo **ESP32-S3-Touch-LCD-2.8C** —
-ESP32-S3R8 (8 MB PSRAM, 16 MB flash), kulatý displej 480×480 s řadičem ST7701,
+ESP32-S3R8 (8 MB PSRAM, 16 MB flash), kulatý displej 480×480 s řadičem S
+T7701,
 expandér TCA9554. Dotyk je CST820 (2.1), respektive GT911 (2.8C).
 Stačí deska a USB-C kabel, nic se nepájí.
 
