@@ -9,6 +9,8 @@ ESP32-S3-Touch-LCD-2.1 a ESP32-S3-Touch-LCD-2.8C a nastavuje se z prohlížeče.
 
 ---
 
+![Obrazovky](https://github.com/petus/MeteoPlaneRadar/blob/main/obrazovky.png)
+
 ## Co to umí
 
 | Obrazovka | Co ukazuje | Zdroj |
