@@ -8,6 +8,8 @@ a browser.
 > Built by **[chiptron.cz](https://chiptron.cz)** with Claude AI.
 > Czech version of this document: [README.md](README.md)
 
+> Do you like this project? It is free and open-source but you may support me by **https://buymeacoffee.com/chiptroncz**
+
 ![Obrazovky](https://github.com/petus/MeteoPlaneRadar/blob/main/obrazovky.png)
 
 
