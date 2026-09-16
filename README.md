@@ -7,6 +7,8 @@ ESP32-S3-Touch-LCD-2.1 a ESP32-S3-Touch-LCD-2.8C a nastavuje se z prohlížeče.
 > Vyvíjí **[chiptron.cz](https://chiptron.cz)** a Claude AI.
 > English version: **[README_EN.md](README_EN.md)**
 
+> Líbí se ti tenhle projekt? Jdeš do něj? Je totiž kompletně zdarma. Podpořit mě ale můžeš, pokud chceš, tím, že mi koupíš kafe na **https://buymeacoffee.com/chiptroncz**
+
 ---
 
 ![Obrazovky](https://github.com/petus/MeteoPlaneRadar/blob/main/obrazovky.png)
@@ -30,8 +32,6 @@ Obě energetické obrazovky jsou po aktualizaci vypnuté (zapnou se ve webovém
 nastavení) a dokud jsou vypnuté, zařízení si o jejich data vůbec neřekne.
 Zobrazená cena je **burzovní**, ne to, co platíte — vlastní přirážku a DPH
 si lze doplnit na záložce Energie, viz [CHANGELOG](CHANGELOG.md).
-
-> Líbí se ti tenhle projekt? Jdeš do něj? Je totiž kompletně zdarma. Podpořit mě ale můžeš, pokud chceš, tím, že mi koupíš kafe na **https://buymeacoffee.com/chiptroncz**
 
 ## Hardware
 
