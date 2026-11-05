@@ -11,6 +11,244 @@ pohromadě v `MeteoPlaneRadar/Config.h`.
 
 ---
 
+## [0.8.5]
+
+### Změněno
+
+- **Vyhlazené písmo na všech obrazovkách.** Výběr písma (Inter, Poppins,
+  Inter tenké, pixelové) už neplatí jen pro hodiny, ale pro celý displej:
+  letadla a jejich detail, meteoradar, předpověď, cenu elektřiny, výrobu,
+  nastavení i obrazovku pro připojení k WiFi. Na webu je volba na záložce
+  Vzhled jako „Písmo (všechny obrazovky)“.
+
+  Rozložení obrazovek se nemění: písmena jsou stejně vysoká jako u původního
+  písma, stojí na stejné účaří a text nikdy není širší, než by byl původní
+  (kdyby byl, mezery se o kousek zúží). Všechno tedy zůstává tam, kde bylo.
+
+- **Diakritika na displeji.** Vyhlazená písma mají české znaky, takže displej
+  teď píše „Předpověď“, „Výška“, „Út“, „října“ místo „Predpoved“, „Vyska“,
+  „Ut“, „rijna“. Písma obsahují i další evropské znaky, takže se správně
+  zobrazí i názvy letišť jako „Zürich“ nebo „Kraków“. S pixelovým písmem
+  zůstává všechno bez diakritiky jako dřív.
+
+  Diakritiku dostaly i texty, které nejsou v tabulce překladů: „Jazyk:
+  čeština“, „v okně“, „Kč/kWh“, „ČHMÚ“, obrazovka připojení k WiFi a hláška
+  při továrním resetu.
+
+- **Nejmenší písmo je tučnější.** Zkratky měst, legenda meteoradaru a další
+  drobné popisky se kreslí silnějším řezem téhož písma, aby byly i v osmi
+  pixelech dobře čitelné.
+
+### Opraveno
+
+- **Legenda meteoradaru ČHMÚ měla špatné hodnoty u čtyř nižších barev.**
+  Podle barevné škály ČHMÚ, ověřené na skutečných snímcích, je modrá 12 dBZ
+  (ne 20), zelená 24 (ne 32), žlutá 36 (ne 40) a oranžová 44 (ne 46). Hodnoty
+  v mm/h jsou přepočtené stejně jako dřív. Legenda RainVieweru se nemění.
+
+---
+
+## [0.8.4]
+
+### Změněno
+
+- **Šetrnější k přetíženému API letadel.** Když adsb.fi neodpoví nebo vrátí
+  chybu, zařízení se dřív zeptalo hned znovu a pak dál každých 10–30 sekund.
+  Teď každá další chyba v řadě prodlouží pauzu na dvojnásobek (10 s, 20 s,
+  40 s … až 5 minut) a pauza platí pro všechno najednou: radar letadel,
+  hlídání letadel poblíž i Home Assistant. Na odpověď **429** (příliš mnoho
+  dotazů) nebo chybu serveru (5xx) se už v témže pokusu znovu neptá, a když
+  server pošle `Retry-After`, počká tak dlouho, jak říká. První úspěšná
+  odpověď všechno vrátí do normálu.
+
+- **Stará letadla nevypadají jako živá.** Když minutu nepřijdou nová data,
+  letadla na radaru zešednou a místo počtu se ukáže „stará data: X min“
+  i se zbývající pauzou. Po deseti minutách se letadla přestanou kreslit
+  úplně („bez dat o letadlech“). Ze starých dat se nespustí ani upozornění na
+  letadlo poblíž a Home Assistant dostane počet 0, `stale: true` a stáří dat
+  v `data_age_s`.
+
+- **Střídání obrazovek se kvůli výpadku nezastaví.** Otevřený detail letadla
+  dřív střídání držel. Teď ho drží, jen dokud jsou data čerstvá; když minutu
+  nepřijdou nová, detail se zavře a obrazovky se střídají dál. Stahování
+  během pauzy navíc nic neblokuje, takže displej nečeká na server, který
+  neodpovídá.
+
+---
+
+## [0.8.3]
+
+### Opraveno
+
+- **Výroba ČR ukazovala jen „Načítám“.** Zařízení se ptalo energy-charts na
+  poslední 4 hodiny, protože data obvykle chodí s hodinovým až dvouhodinovým
+  zpožděním. 25. 10. 2026 byl ale nejnovější vzorek pro Česko starý jedenáct
+  hodin, server na prázdné okno odpovídal `404 no content available` a
+  obrazovka se nikdy nenačetla. Když teď v krátkém okně nic není, zkusí se
+  12 a pak 36 hodin. Obrazovka pak ukáže nejnovější dostupný vzorek i s jeho
+  časem.
+- **Čitelnější chyby v sériovém výpisu.** Při chybě HTTP se vypíše i adresa
+  dotazu a začátek odpovědi serveru, ne jen kód.
+
+---
+
+## [0.8.2]
+
+### Přidáno
+
+- **Vysvětlivky ikon letadel ve webovém nastavení.** Na záložce Letadla je
+  na konci nová karta se všemi ikonami a tím, co znamenají: úzkotrupé, širokotrupé,
+  čtyřmotorové, regionální, business jet, turbovrtulové, malá letadla,
+  vojenská transportní, těžká nákladní, stíhačky, kluzáky, konvertoplány,
+  vrtulníky, balony, drony, nezjištěný typ a neznámý směr letu — vždy
+  s příklady typů. Ikony se na stránce kreslí ze stejných tvarů jako na
+  displeji, takže se nemůžou rozejít.
+
+- **Uvedení zdroje ikon.** Rozdělení typů letadel do ikon vychází ze schématu
+  [ADS-B Radar](https://adsb-radar.com/help/icons.html). Jejich ikony jsou
+  volně k použití pod podmínkou odkazu zpět. Projekt jejich soubory nepoužívá
+  (tvary kreslí firmware sám), odkaz ale uvádí: v panelu Zdroje dat na webu,
+  u vysvětlivek ikon, v README a v LICENSE.txt.
+
+---
+
+## [0.8.1]
+
+### Opraveno
+
+- **Názvy měst na meteoradaru jsou čitelné i nad srážkami.** Žlutá a
+  světle zelená oblast nebo bledé odstíny z ČHMÚ masked byly stejně světlé jako
+  bílé písmo měst a název v nich zmizel. Teď se před nakreslením popisku
+  zkontroluje, co pod ním na displeji je: když je pozadí příliš světlé, popisek
+  i tečka města se nakreslí **černě** s tenkým světlým okrajem, takže se dají
+  přečíst i tehdy, když leží napůl na srážkách a napůl na černém podkladu. Nad
+  tmavým podkladem zůstávají bílé jako dřív. Na radaru letadel je mapa černá,
+  takže tam se nic nemění.
+
+---
+
+## [0.8.0]
+
+### Přidáno
+
+- **Meteoradar jen při bouřce.** Nová volba u automatického střídání:
+  meteoradar se do střídání dostane jen tehdy, když se k zařízení blíží
+  srážky. Každých pět minut se stáhne nejnovější snímek ČHMÚ a zkontroluje se,
+  jestli je v zadané vzdálenosti odraz aspoň zadané síly. Výchozí je **20 dBZ
+  do 50 km**, obojí jde změnit ve webovém nastavení (záložka Obrazovky).
+
+  Funguje to i tehdy, když je obrazovka Meteoradar jinak vypnutá: bouřka ji
+  přidá a po dvou klidných snímcích po sobě zase zmizí, aby neblikala sem a
+  tam. Když je meteoradar zrovna na displeji se zdrojem ČHMÚ, hlídání použije
+  snímek, který už je stažený, a nestahuje ho podruhé.
+
+  Hlídá se jen podle ČHMÚ, i když obrazovka používá RainViewer: je to jeden
+  obrázek se známou barevnou škálou, ne tucet dlaždic. Mimo pokrytí ČHMÚ to
+  stavová stránka napíše rovnou, místo aby předstírala jasnou oblohu.
+
+- **Letadlo poblíž.** Stejný princip pro letadla. Obrazovka Letadla se pak ve
+  střídání sama neobjevuje, ale jakmile se letadlo přiblíží na zadanou
+  vzdálenost (**výchozí 5 km**), zařízení na ni přepne, rovnou otevře detail
+  toho letadla a po zadané době (**výchozí 15 s**) se vrátí tam, kde bylo.
+  Rozsah radaru se při tom zvolí tak, aby se letadlo vešlo, a pak se vrátí ten
+  váš.
+
+  Každé letadlo se ukáže jednou (pamatuje si ho 15 minut), takže letadlo
+  kroužící nad domem střídání neruší pořád dokola. Filtry výšky a callsignu
+  platí i tady. Dotyk během ukázky ji ukončí a zůstane se na letadlech.
+  Funguje i bez automatického střídání.
+
+  Když obrazovka Letadla není na displeji, zařízení se adsb.fi ptá jen na malý
+  okruh (vzdálenost upozornění, případně dohled z okna) každých 8 sekund.
+
+- **Výhled z okna.** Na záložce Letadla se zadá směr okna (S, SV, V … SZ),
+  šířka výhledu a dohled. Letadlo, které je ve výhledu, má při upozornění
+  přednost před bližším letadlem, které z okna vidět není — letadlo 3 km za
+  domem je blíž než to 9 km před oknem, ale uvidíte jen to druhé. Výseč se
+  zakreslí tenkými čarami do radaru letadel.
+
+- **Tři WiFi sítě.** Zařízení si pamatuje až tři sítě a dají se zapsat ručně ve
+  webovém nastavení, i když zrovna nejsou v dosahu — síť v kanceláři se tak
+  nastaví ještě doma. Při startu se zkusí ta nejsilnější z dosažitelných, pak
+  ostatní (i skrytá síť, kterou sken nevidí). Když spojení spadne, zařízení
+  minutu zkouší obnovit tu svou a pak projde ostatní uložené.
+
+  Původní síť zůstává uložená pod stejným klíčem, takže aktualizace nic
+  nerozbije. Hesla stránka nikdy nedostane, jen informaci, že je nějaké
+  uložené; prázdné pole hesla ho nechá beze změny.
+
+- **Home Assistant.** Nová adresa `http://meteoplaneradar.local/api/ha` vrací
+  jeden JSON se vším, co zařízení ví: teplota, vítr, srážky, bouřka v okolí
+  (nejsilnější odraz, vzdálenost), nejbližší letadlo (callsign, typ, výška,
+  vzdálenost, jestli je v okně), počet letadel, cena elektřiny a podíl OZE.
+  Home Assistant si to sám stahuje integrací **RESTful**, žádné MQTT ani
+  doplněk není potřeba. Na nové záložce Home Assistant je adresa a hotový
+  kousek `configuration.yaml` ke zkopírování.
+
+  Ve výchozím stavu je to vypnuté. Dokud je to zapnuté, běží i hlídání bouřky
+  a letadel poblíž (letadla jen jednou za 30 s), aby čísla byla živá.
+
+  > **⚠ Nevyzkoušeno.** Tahle funkce nebyla ověřena se skutečným Home
+  > Assistantem — formát odpovídá dokumentaci integrace RESTful, ale nikdo na
+  > zařízení zatím Home Assistant nenamířil. Pokud něco nesedí, dejte vědět.
+
+- **ČHMÚ masked.** Třetí zdroj meteoradaru vedle ČHMÚ a RainVieweru. Je to
+  tentýž kompozit maximální odrazivosti, ale ČHMÚ ho porovná s měřením ve
+  výšce 2 km: plnou barvou jsou jen místa, kde srážky opravdu dopadají na zem,
+  zbytek (srážky, které se cestou vypaří, kovadliny vzdálených bouřek) je
+  bledší. Na otázku „bude u nás pršet?“ odpovídá přesněji, pro sledování
+  bouřek je lepší plný ČHMÚ. Rozdíl je vysvětlený i ve webovém nastavení.
+
+- **Vlastní barvy výšek letadel.** Tři hladiny a čtyři barvy na záložce
+  Letadla. Výchozí jsou přesně ty dosavadní (červená pod 2 km, oranžová 2–6
+  km, žlutá 6–10 km, modrá nad 10 km), takže dokud se do nastavení nesáhne,
+  nic se nemění. Legenda na displeji se přizpůsobí.
+
+### Změněno
+
+- **Hodiny mají hezčí písmo.** Číslice byly vestavěný font 5×7 zvětšený
+  osmkrát, tedy schody z kostek 8×8 pixelů. Teď jsou to skutečné obrysy písma
+  vykreslené v té velikosti, ve které se zobrazují, se šestnácti stupni
+  vyhlazení. Na výběr je **Inter** (výchozí), **Poppins**, **Inter tenké** a
+  původní pixelové. Číslice mají všechny stejnou šířku, takže čas při změně
+  minuty neposkakuje.
+
+  Vyhlazené písmo dostalo i datum, teplota, srážky a vítr na hodinách — a
+  protože fonty obsahují české znaky, datum je konečně „25. října“, ne
+  „25. rijna“. Fonty generuje `tools/make_fonts.py`, zabírají asi 190 kB
+  flash.
+
+- **Ikony letadel podle typu**, podle schématu
+  [adsb-radar.com](https://adsb-radar.com/help/icons.html). Vrtulník má rotor,
+  kluzák dlouhá tenká křídla, A380 je viditelně větší než Cessna. Typ se pozná
+  z kódu typu z adsb.fi (A20N, B738, EC35…); u neznámého typu z kategorie,
+  kterou vysílá každý transpondér (A1 lehké … A7 vrtulník, B1 kluzák). Co nejde
+  zařadit, má dosavadní šipku.
+
+  Seznamy typů z té stránky jsou převzaté s opravou několika zjevných chyb
+  (737 v dlaždici B767, A350 mezi čtyřmotorovými, MD-90 mezi vrtulníky,
+  seznam MD-11 zkopírovaný z ERJ). Žádné soubory ikon z webu se nepřebírají,
+  tvary kreslí firmware sám.
+
+- **Stav zařízení** na webu má dva nové řádky: bouřka a letadla poblíž.
+- **Dálkové ovládání** na webu zvýrazňuje obrazovku, která je opravdu na
+  displeji, i když na ni přepnulo automatické střídání nebo upozornění.
+- `sketch.yaml` uvádí verze, se kterými se 0.8.0 skutečně překládá (core
+  3.3.10, GFX 1.6.9, PNGdec 1.1.7). Dříve uvedené verze už ke kódu neseděly.
+
+### Poznámky
+
+- Všechny nové limity (dBZ, km, sekundy, okno, barvy, hladiny, písmo) se
+  ukládají do NVS, přežijí restart a jsou v exportu i importu nastavení.
+  WiFi sítě a hesla v exportu záměrně nejsou, stejně jako dosud.
+- Převod barvy snímku ČHMÚ na dBZ vychází z barevné škály ČHMÚ
+  (`scl-dbzmmh.png`). Na skutečných snímcích (plném i masked z 18. 10. 2026)
+  barvy 4–36 dBZ přesně sedí a bledé odstíny z masked varianty se správně
+  nepočítají; silnější barvy (40 dBZ a víc) zatím na reálné bouřce ověřené
+  nejsou.
+
+---
+
 ## [0.7.0]
 
 ### Přidáno

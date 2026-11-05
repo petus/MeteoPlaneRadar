@@ -59,7 +59,7 @@ It is not a phone and does not try to be one.
 | --- | --- | --- |
 | **Clock** | time, date, current weather, seconds ring | Open-Meteo |
 | **Aircraft** | aircraft around you, tap for details and route | adsb.fi, adsb.lol |
-| **Weather radar** | animated precipitation | CHMI or RainViewer |
+| **Weather radar** | animated precipitation | CHMI, CHMI masked or RainViewer |
 | **Forecast** | now, two 3-hour windows, today and six more days, air quality and pollen | Open-Meteo |
 | **Electricity price** | spot price on a quarter-hour dial, today and tomorrow | OTE via spotovaelektrina.cz |
 | **Generation** | what the grid is running on, renewable share, load, export | Energy-Charts (Fraunhofer ISE) |
@@ -77,6 +77,12 @@ Date, large time, current weather with temperature and rain, wind speed below.
 A **seconds ring** runs around the rim — off, dots, a continuous line, or a
 comet with a fading tail. Clock and seconds colours are configurable.
 
+**Typeface** (0.8.0): the time, date, temperature and wind are drawn from real
+font outlines with 16 levels of anti-aliasing — **Inter** (default),
+**Poppins**, **Inter thin**, or the original pixel font. The digits are
+tabular, so the time does not shift sideways as the minutes change, and the
+Czech date keeps its accents.
+
 No Home Assistant and no sensor: the weather comes from the same request the
 forecast screen makes anyway.
 
@@ -93,7 +99,9 @@ fixed offset the server reported. The current value is on the web status page.
 
 ### Aircraft
 
-Aircraft icons are colour-coded by flight level:
+Aircraft icons are colour-coded by flight level. Since 0.8.0 the three
+boundaries and the four colours can be changed on the Aircraft tab; the
+defaults are:
 
 | Altitude | Colour | Typically |
 | --- | --- | --- |
@@ -103,6 +111,24 @@ Aircraft icons are colour-coded by flight level:
 | 10 km and up | Blue | Long-haul cruise |
 
 An aircraft not reporting its altitude is drawn grey, not red.
+
+The **icon follows the airframe** (0.8.0), after the scheme of
+[adsb-radar.com](https://adsb-radar.com/help/icons.html): helicopters have a
+rotor disc, gliders long thin wings, an A380 is visibly bigger than a Cessna.
+The kind comes from the ICAO type code adsb.fi sends (A20N, B738, EC35...), or
+from the ADS-B emitter category when the type is unknown; anything else keeps
+the original arrow.
+
+**Aircraft nearby** (0.8.0, Screens tab): the Aircraft screen leaves the
+automatic cycling and instead jumps in for a set time (default 15 s) whenever an
+aircraft comes within a set distance (default 5 km) - with that aircraft's
+detail already open - then the cycling carries on where it was. Each aircraft
+is shown once per 15 minutes.
+
+**Window view** (0.8.0, Aircraft tab): the bearing of your window, the width of
+the view and how far you can see. An aircraft in the view takes priority for
+the alert over a nearer one you cannot see from the window. The sector is drawn
+on the radar.
 
 Tap one for the detail panel: altitude, speed, track, climb rate, aircraft type,
 registration and where it is flying from and to. It updates live while open.
@@ -129,10 +155,16 @@ mm/h.
 
 Ranges: 25, 50, 100, 200 km and the whole Czech Republic.
 
-**Two sources, switchable in the browser:**
+**Three sources, switchable in the browser:**
 
 - **CHMI** (default) — sharper, but the data ends just beyond the Czech border.
-  With a location abroad the screen stays blank.
+  With a location abroad the screen stays blank. Shows every echo the radars
+  see, at full colour.
+- **CHMI masked** (0.8.0) — the same composite, but CHMI checks it against the
+  2 km PseudoCAPPI: only where the rain actually reaches the ground is it drawn
+  at full colour; rain evaporating on the way down and distant storm anvils
+  come out paler. Better for "will it rain here?", while plain CHMI is better
+  for watching storms.
 - **RainViewer** — European and global coverage, also free and keyless. Coarser:
   their tiles stop at zoom 7, roughly 790 metres per pixel, so closer ranges are
   built from what is available. That is genuinely all the detail there is.
@@ -140,6 +172,13 @@ Ranges: 25, 50, 100, 200 km and the whole Czech Republic.
 The legend switches with the source and says which one you are reading — each
 radar has its own palette, so the same yellow means 40 dBZ on one scale and 35
 on the other.
+
+**Radar only when a storm is coming** (0.8.0, Screens tab): the weather radar
+joins the automatic cycling only while an echo of at least a set strength
+(default 20 dBZ) lies within a set distance (default 50 km). The newest CHMI
+frame is checked every five minutes; two clear frames in a row drop the radar
+out again. Works even with the weather radar screen switched off. CHMI data
+only, so Czechia and a little beyond.
 
 ### Forecast
 
@@ -287,10 +326,42 @@ by WiFiManager, which is no longer used. The device will bring up its own
 network once and you enter your WiFi again. Location, brightness and map
 orientation are kept.
 
+## Several WiFi networks
+
+Since 0.8.0 the device remembers up to **three networks**. They are entered on
+the Control tab and can be typed in while out of range. At boot the strongest
+one in range is tried first; when the link drops, after a minute the other
+saved networks are tried.
+
+## Home Assistant
+
+> **⚠ Not tested with a real Home Assistant.** The format follows the
+> documentation of the RESTful integration, but nobody has pointed one at the
+> device yet. Please report anything that does not fit.
+
+Home Assistant **pulls** the data from
+
+```
+http://meteoplaneradar.local/api/ha
+```
+
+with its built-in **RESTful** integration - no MQTT, broker or add-on needed.
+Switch it on in the web UI on the **Home Assistant** tab, copy the ready-made
+block from there into `configuration.yaml` and restart Home Assistant. Sensors
+such as `MPR Teplota`, `MPR Bourka` and `MPR Nejblizsi letadlo` appear.
+
+The answer carries the current weather, today's min/max, sunrise and sunset,
+the storm watch (active, strongest echo, distance), the nearest aircraft
+(callsign, type, kind, distance, altitude, bearing, in the window or not), the
+aircraft count, the electricity price and the renewable share. It is
+read-only and needs no password. While it is on, the storm watch (one CHMI
+frame per 5 minutes) and a small aircraft poll (every 30 s) run too.
+
 ## For developers
 
-Arduino IDE with **ESP32 core 3.x**. Libraries: **GFX Library for Arduino**,
-**PNGdec**, **ArduinoJson v7**; QRCode is bundled. `WebServer`, `DNSServer`,
+Arduino IDE with **ESP32 core 3.x** (built with 3.3.10). Libraries: **GFX
+Library for Arduino** (1.5.3 or newer, built with 1.6.9), **PNGdec** (1.1.4 or
+newer, built with 1.1.7), **ArduinoJson v7**; QRCode is bundled. `WebServer`, `DNSServer`,
 `ESPmDNS`, `Update` and `Preferences` come with the core. WiFiManager was
 dropped in 0.6.0, ElegantOTA in 0.6.2.
 
@@ -311,7 +382,12 @@ Forecast.*            Open-Meteo: forecast, sun times, air quality
 Energy.*              spot electricity price and generation mix
 TimeZone.*            time zone from the location
 RainViewer.*          tile radar
+StormWatch.*          storm watch from the CHMI frame (0.8.0)
+PlaneWatch.*          aircraft-nearby watch and window view (0.8.0)
+PlaneIcon.*           aircraft icons by type (0.8.0)
+AAFont.* ClockFonts.h anti-aliased clock typefaces (0.8.0)
 Screen*.{h,cpp}       individual screens
+tools/make_fonts.py   generates ClockFonts.h from TTF/OTF
 ```
 
 **Why nothing overlaps:** each screen reserves its chrome before the map is
@@ -359,10 +435,17 @@ Two further notes:
   do not use") because they return averages of four quarter-hour blocks. The
   firmware uses `get-prices-json-qh`.
 
+**Aircraft icons:** the assignment of aircraft types to icon shapes follows
+the scheme of [ADS-B Radar](https://adsb-radar.com/help/icons.html). The
+shapes are drawn by the firmware; no icon files are used.
+
 ## Licence
 
 **MIT** — see [LICENSE.txt](LICENSE.txt). It covers the source code and the
 binaries built from it. Since 0.6.2 the project has no copyleft dependency.
+
+The clock typefaces (**Inter**, **Poppins**) are under the SIL Open Font
+License 1.1, which allows embedding them in firmware.
 
 **MIT does not cover the data.** **GeoNames**, **CHMI**, **RainViewer**,
 **Open-Meteo** and **Energy-Charts.info** all require visible attribution, and
