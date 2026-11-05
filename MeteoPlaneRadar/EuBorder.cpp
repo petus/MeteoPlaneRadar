@@ -12,6 +12,8 @@
 #include "CzCitiesData.h"   // Czech cities - they replace the European ones
 #include "UI.h"
 #include "Layout.h"
+#include "Canvas16.h"   // framebuffer read-back for the label contrast
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
@@ -101,6 +103,41 @@ static bool haveCzechCity(float lat, float lon) {
 // Cities are drawn tier by tier, so the bigger place always wins the spot and
 // it is the small town next to it that disappears.
 
+// --- Label colour against what is underneath (0.8.1) ------------------------
+// On the weather radar the labels sit on top of the precipitation, and yellow
+// rain or the pale shades of the masked composite are as bright as the white
+// text - the name simply vanished. So before a label is drawn, the pixels it
+// is about to cover are read back from the framebuffer: if too many of them are
+// close in brightness to the intended colour, the label (and its dot) is drawn
+// black instead. On the aircraft radar the map is black and nothing changes.
+#define LABEL_MIN_CONTRAST 90      // luma difference that still reads, 0..255
+#define LABEL_BAD_SHARE    25      // per cent of low-contrast pixels -> go black
+
+static int luma565(uint16_t c) {
+  const int r = ((c >> 11) & 0x1F) * 255 / 31;
+  const int g = ((c >> 5) & 0x3F) * 255 / 63;
+  const int b = (c & 0x1F) * 255 / 31;
+  return (r * 77 + g * 150 + b * 29) >> 8;
+}
+
+static uint16_t contrastColour(int x, int y, int w, int h, uint16_t want) {
+  uint16_t* fb = static_cast<Canvas16*>(gfx)->getFramebuffer();
+  if (!fb) return want;
+  const int W = gfx->width(), H = gfx->height();
+  const int lw = luma565(want);
+  int total = 0, bad = 0;
+  for (int j = y; j < y + h; j++) {
+    if (j < 0 || j >= H) continue;
+    for (int i = x; i < x + w; i++) {
+      if (i < 0 || i >= W) continue;
+      total++;
+      if (abs(luma565(fb[(int32_t)j * W + i]) - lw) < LABEL_MIN_CONTRAST) bad++;
+    }
+  }
+  if (total && bad * 100 >= total * LABEL_BAD_SHARE) return C_BLACK;
+  return want;
+}
+
 // One city. Split out of the loop below so the European set and the Czech
 // list can share it.
 static void drawOneCity(const EuCity& c, ProjectFn project, int cx, int cy,
@@ -156,7 +193,7 @@ static void drawOneCity(const EuCity& c, ProjectFn project, int cx, int cy,
     // Where the label goes: to the right of the dot, or to the left when that
     // would spill out of the circle.
     const char* label = showFull ? c.name : c.abbr;
-    int tw = strlen(label) * 6;
+    int tw = Layout_TextW(label, 1);
     int ty = sy - 4;
     int tx = sx + 9;
     if ((long)(tx + tw - cx) * (tx + tw - cx) + dy * dy > r2) tx = sx - 9 - tw;
@@ -175,9 +212,21 @@ static void drawOneCity(const EuCity& c, ProjectFn project, int cx, int cy,
       tx = alt;
     }
 
-    gfx->fillCircle(sx, sy, 3, dotColor);
+    // Decide the colours BEFORE drawing anything of this city, so the dot does
+    // not count as background for its own label.
+    const uint16_t dc = contrastColour(sx - 3, sy - 3, 7, 7, dotColor);
+    const uint16_t tc = contrastColour(tx, ty, tw, 8, textColor);
+    // Black goes on with a thin rim of the original colour: a label that is
+    // only partly over bright rain must stay readable over the dark part too.
+    if (dc != dotColor) gfx->fillCircle(sx, sy, 4, dotColor);
+    gfx->fillCircle(sx, sy, 3, dc);
     gfx->setTextSize(1);
-    gfx->setTextColor(textColor);
+    if (tc != textColor) {
+      gfx->setTextColor(textColor);
+      static const int8_t OFF[4][2] = { {-1, 0}, {1, 0}, {0, -1}, {0, 1} };
+      for (const auto& o : OFF) { gfx->setCursor(tx + o[0], ty + o[1]); gfx->print(label); }
+    }
+    gfx->setTextColor(tc);
     gfx->setCursor(tx, ty);
     gfx->print(label);
   }

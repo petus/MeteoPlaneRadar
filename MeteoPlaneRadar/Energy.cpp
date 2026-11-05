@@ -372,23 +372,29 @@ static bool fetchMix() {
   if (!Outside_TimeValid()) return false;
 
   const time_t now = time(nullptr);
-  const time_t from = now - (time_t)MIX_WINDOW_H * 3600;
-  const time_t to   = now + 3600;          // a little ahead, harmless if empty
+  const time_t to  = now + 3600;           // a little ahead, harmless if empty
 
-  struct tm a, b;
-  gmtime_r(&from, &a);
-  gmtime_r(&to,   &b);
-
-  char url[256];
-  snprintf(url, sizeof(url),
-    "%s?country=%s&start=%04d-%02d-%02dT%02d:%02dZ&end=%04d-%02d-%02dT%02d:%02dZ",
-    MIX_URL, Settings_MixCountry(),
-    a.tm_year + 1900, a.tm_mon + 1, a.tm_mday, a.tm_hour, a.tm_min,
-    b.tm_year + 1900, b.tm_mon + 1, b.tm_mday, b.tm_hour, b.tm_min);
-
+  // Narrow window first, wider ones only if it comes back empty (energy-charts
+  // answers an empty window with 404 "no content available") - see Config.h.
+  static const int WINDOWS[] = MIX_WINDOWS_H;
   String body;
-  if (!Net_GetString(url, body, "MIX")) {
-    Status_Set(ST_MIX, "chyba stahovani");
+  bool got = false;
+  for (int w : WINDOWS) {
+    const time_t from = now - (time_t)w * 3600;
+    struct tm a, b;
+    gmtime_r(&from, &a);
+    gmtime_r(&to,   &b);
+    char url[256];
+    snprintf(url, sizeof(url),
+      "%s?country=%s&start=%04d-%02d-%02dT%02d:%02dZ&end=%04d-%02d-%02dT%02d:%02dZ",
+      MIX_URL, Settings_MixCountry(),
+      a.tm_year + 1900, a.tm_mon + 1, a.tm_mday, a.tm_hour, a.tm_min,
+      b.tm_year + 1900, b.tm_mon + 1, b.tm_mday, b.tm_hour, b.tm_min);
+    if (Net_GetString(url, body, "MIX")) { got = true; break; }
+    Serial.printf("MIX: za poslednich %d h nic, zkousim delsi okno\n", w);
+  }
+  if (!got) {
+    Status_Set(ST_MIX, "zadna data (zdroj se zpozduje)");
     return false;
   }
 

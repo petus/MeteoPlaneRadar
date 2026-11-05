@@ -19,6 +19,8 @@ enum StatusSlot : uint8_t {
   ST_ADSB = 0, ST_RADAR, ST_FORECAST,
   ST_PRICE,        // spot electricity price
   ST_MIX,          // generation mix
+  ST_STORM,        // storm watch (0.8.0)
+  ST_PLANEWATCH,   // aircraft-nearby watch (0.8.0)
   ST_COUNT
 };
 

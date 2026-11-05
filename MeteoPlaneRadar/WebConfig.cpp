@@ -34,6 +34,16 @@
 #include <math.h>
 #include <string.h>
 #include "TimeZone.h"
+#include "StormWatch.h"
+#include "PlaneWatch.h"
+#include "PlaneIcon.h"
+#include "ADSB.h"
+#include "Outside.h"
+#include <time.h>
+
+// Defined in the .ino - the screen actually on the display.
+extern int  MPR_CurrentScreen();
+extern bool MPR_AlertActive();
 
 static WebServer  s_srv(WEB_PORT);
 static DNSServer  s_dns;
@@ -103,6 +113,16 @@ static void handleGetConfig() {
   JsonDocument doc;
   JsonObject o = doc.to<JsonObject>();
   Settings_ToJson(o);
+  // The remembered networks: names only. A password never leaves the device;
+  // the page is told whether one is stored, so it can say so.
+  {
+    JsonArray w = o["wifi"].to<JsonArray>();
+    for (uint8_t i = 0; i < WIFI_SLOTS; i++) {
+      JsonObject e = w.add<JsonObject>();
+      e["ssid"] = Settings_WifiSsid(i);
+      e["hasPass"] = Settings_WifiPass(i)[0] != '\0';
+    }
+  }
   o["version"] = FW_VERSION;
   o["apMode"]  = s_apMode;
   o["ip"]      = s_apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
@@ -271,7 +291,7 @@ static void handleStatus() {
 
   // What the device is showing right now, so the remote control can highlight
   // the active screen and print the range instead of guessing.
-  const uint8_t scr = Settings_Screen();
+  const uint8_t scr = (uint8_t)MPR_CurrentScreen();
   doc["screen"] = scr;
   char rb[24] = "";
   if      (scr == SCREEN_PLANES_I) ScreenPlanes_RangeText(rb, sizeof(rb));
@@ -291,6 +311,139 @@ static void handleStatus() {
   Status_Text(ST_FORECAST, b, sizeof(b)); doc["forecast"] = b;
   Status_Text(ST_PRICE, b, sizeof(b));    doc["price"] = b;
   Status_Text(ST_MIX, b, sizeof(b));      doc["mix"] = b;
+  Status_Text(ST_STORM, b, sizeof(b));    doc["storm"] = b;
+  Status_Text(ST_PLANEWATCH, b, sizeof(b)); doc["planeWatch"] = b;
+  sendJson(200, doc);
+}
+
+// --- Remembered WiFi networks (0.8.0) ----------------------------------------
+// Saves the three slots WITHOUT connecting. The point is to enter the office
+// network at home, before the device is carried there; it is tried whenever
+// the current network goes away. A missing or empty "pass" keeps whatever is
+// stored, because the page never knows the stored passwords.
+static void handleWifiList() {
+  JsonDocument doc;
+  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
+  JsonArrayConst nets = doc["nets"];
+  if (nets.isNull()) { s_srv.send(400, "application/json", "{\"error\":\"nets\"}"); return; }
+  for (uint8_t i = 0; i < WIFI_SLOTS && i < nets.size(); i++) {
+    const char* ssid = nets[i]["ssid"] | "";
+    const char* pass = nets[i]["pass"] | "";
+    Settings_SetWifiSlot(i, ssid, (pass && *pass) ? pass : nullptr);
+  }
+  s_srv.send(200, "application/json", "{\"ok\":true}");
+}
+
+// --- Home Assistant (0.8.0) ---------------------------------------------------
+// One flat-ish JSON object for Home Assistant's RESTful integration: poll it
+// every minute or so and pull the values out with value_template. Read-only,
+// no password - it says nothing the screen does not already show to anyone in
+// the room. Off unless switched on in the web UI. NOT TESTED against a real
+// Home Assistant: the shape follows the documented REST sensor, but nobody has
+// pointed one at it yet.
+static const char* const SCREEN_KEYS[SCREEN_N] = {
+  "clock", "planes", "meteo", "forecast", "price", "mix", "settings" };
+
+static void handleHa() {
+  if (!Settings_HaEnabled()) {
+    s_srv.send(404, "application/json", "{\"error\":\"disabled\"}");
+    return;
+  }
+  JsonDocument doc;
+  doc["version"] = FW_VERSION;
+  doc["uptime_s"] = (uint32_t)(millis() / 1000UL);
+  doc["ip"]   = WiFi.localIP().toString();
+  doc["ssid"] = WiFi.SSID();
+  doc["rssi"] = WiFi.RSSI();
+  doc["lat"]  = Settings_Lat();
+  doc["lon"]  = Settings_Lon();
+
+  const int scr = MPR_CurrentScreen();
+  doc["screen"] = (scr >= 0 && scr < SCREEN_N) ? SCREEN_KEYS[scr] : "?";
+  doc["night"] = Settings_IsNight();
+  doc["brightness"] = Settings_Backlight();
+
+  // Weather. null rather than 0 when not known yet: a 0 degC reading and "no
+  // data" must not look the same in a graph.
+  if (Forecast_CurrentValid()) {
+    doc["temperature"]  = roundf(Forecast_CurrentTemp() * 10) / 10;
+    doc["wind_kmh"]     = roundf(Forecast_CurrentWind() * 10) / 10;
+    doc["precip_mm"]    = roundf(Forecast_CurrentPrecip() * 10) / 10;
+    doc["weather_code"] = Forecast_CurrentCode();
+  } else {
+    doc["temperature"] = nullptr; doc["wind_kmh"] = nullptr;
+    doc["precip_mm"] = nullptr;   doc["weather_code"] = nullptr;
+  }
+  if (Forecast_DayCount() > 0) {
+    const FcDay& d = Forecast_Days()[0];
+    doc["today_min"] = roundf(d.tmin * 10) / 10;
+    doc["today_max"] = roundf(d.tmax * 10) / 10;
+  }
+  time_t rise, set;
+  if (Forecast_SunTimes(&rise, &set)) {
+    char t[8]; struct tm lt;
+    localtime_r(&rise, &lt); snprintf(t, sizeof(t), "%02d:%02d", lt.tm_hour, lt.tm_min); doc["sunrise"] = t;
+    localtime_r(&set, &lt);  snprintf(t, sizeof(t), "%02d:%02d", lt.tm_hour, lt.tm_min); doc["sunset"] = t;
+  }
+  if (AirQuality_Valid()) {
+    if (AirQuality_Aqi() >= 0) doc["aqi"] = AirQuality_Aqi();
+    doc["pm25"] = roundf(AirQuality_Pm25() * 10) / 10;
+  }
+
+  // Storm watch. Runs whenever this endpoint is on, so these are live even with
+  // the "radar only when a storm is coming" option off.
+  {
+    JsonObject st = doc["storm"].to<JsonObject>();
+    st["active"]    = StormWatch_Active();
+    st["valid"]     = StormWatch_Valid();
+    st["coverage"]  = StormWatch_InCoverage();
+    st["threshold_dbz"] = Settings_StormDbz();
+    st["radius_km"] = Settings_StormKm();
+    if (StormWatch_Valid()) {
+      st["max_dbz"] = StormWatch_MaxDbz() >= 0 ? (int)StormWatch_MaxDbz() : 0;
+      if (StormWatch_NearestKm() >= 0) st["nearest_km"] = roundf(StormWatch_NearestKm());
+      else                             st["nearest_km"] = nullptr;
+      st["area_km2"] = StormWatch_Pixels();
+      st["frame"]    = StormWatch_FrameTime();
+    }
+  }
+
+  // Aircraft. The list is whatever was fetched last: the small watch area
+  // while another screen is up, the radar range while the aircraft screen is.
+  {
+    JsonObject ac = doc["aircraft"].to<JsonObject>();
+    ac["count"] = ADSB_DataStale() ? 0 : ADSB_Count();
+    if (ADSB_DataAgeMs() != 0xFFFFFFFFUL) ac["data_age_s"] = ADSB_DataAgeMs() / 1000UL;
+    ac["stale"] = ADSB_DataStale();
+    ac["alert"] = MPR_AlertActive();
+    float km = 0, brg = 0; bool win = false;
+    const int i = PlaneWatch_Best(&km, &brg, &win);
+    if (i >= 0) {
+      const Aircraft& a = ADSB_List()[i];
+      ac["callsign"]    = a.callsign[0] ? a.callsign : a.hex;
+      ac["hex"]         = a.hex;
+      ac["type"]        = a.type;
+      ac["registration"]= a.reg;
+      ac["kind"]        = PlaneIcon_Name(a.icon);
+      ac["distance_km"] = roundf(km * 10) / 10;
+      ac["bearing"]     = (int)lroundf(brg) % 360;
+      ac["altitude_m"]  = (int)lroundf(a.altFt * 0.3048f);
+      ac["speed_kmh"]   = (int)lroundf(a.gsKt * 1.852f);
+      ac["in_window"]   = win;
+      ac["squawk"]      = a.squawk;
+    } else {
+      ac["callsign"] = nullptr;
+      ac["distance_km"] = nullptr;
+    }
+  }
+
+  // Electricity, only when those screens are on (otherwise nothing is fetched).
+  if (Energy_PriceValid()) {
+    doc["price_spot_czk_mwh"] = roundf(Energy_PriceNow());
+    doc["price_czk_kwh"] = roundf(Energy_FinalCzkKwh(Energy_PriceNow()) * 1000) / 1000;
+  }
+  if (Energy_MixValid()) doc["renewable_pct"] = roundf(Energy_RenewableShare() * 10) / 10;
+
   sendJson(200, doc);
 }
 
@@ -621,6 +774,8 @@ void WebConfig_Begin(bool apMode) {
   s_srv.on("/api/range", HTTP_POST, handleRange);
   s_srv.on("/api/scan", HTTP_GET, handleScan);
   s_srv.on("/api/wifi", HTTP_POST, handleWifi);
+  s_srv.on("/api/wifilist", HTTP_POST, handleWifiList);
+  s_srv.on("/api/ha", HTTP_GET, handleHa);
   s_srv.on("/api/geocode", HTTP_GET, handleGeocode);
   s_srv.on("/api/export", HTTP_GET, handleExport);
   s_srv.on("/api/import", HTTP_POST, handleImport);

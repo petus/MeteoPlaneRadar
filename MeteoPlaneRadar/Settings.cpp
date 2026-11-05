@@ -14,8 +14,11 @@ static Preferences prefs;
 static const char* NS = "planeradar";
 
 // --- WiFi ---
-static char s_ssid[33] = "";
-static char s_wpass[65] = "";
+// Slot 0 lives under the original keys, so an updated device keeps its network.
+static char s_ssid[WIFI_SLOTS][33]  = {};
+static char s_wpass[WIFI_SLOTS][65] = {};
+static const char* const SSID_KEY[WIFI_SLOTS] = { "ssid", "ssid1", "ssid2" };
+static const char* const PASS_KEY[WIFI_SLOTS] = { "wpass", "wpass1", "wpass2" };
 
 // --- Location ---
 static double  s_lat = DEFAULT_LAT;
@@ -55,6 +58,26 @@ static char     s_mixCC[4] = MIX_COUNTRY_DEFAULT;
 static uint8_t  s_secStyle = SEC_STYLE_DOTS;
 static uint16_t s_clockCol = 0xFFFF;   // white
 static uint16_t s_secCol   = 0x05FF;   // cyan
+static uint8_t  s_clkFont  = CLOCK_FONT_DEFAULT;
+
+// --- Altitude colours ---
+static uint16_t s_altBand[3] = { ALT_BAND1_M_DEFAULT, ALT_BAND2_M_DEFAULT, ALT_BAND3_M_DEFAULT };
+static uint16_t s_altCol[4]  = { ALT_COL0_DEFAULT, ALT_COL1_DEFAULT, ALT_COL2_DEFAULT, ALT_COL3_DEFAULT };
+static const char* const ALT_BAND_KEY[3] = { "ab0", "ab1", "ab2" };
+static const char* const ALT_COL_KEY[4]  = { "acol0", "acol1", "acol2", "acol3" };
+
+// --- Storm watch, aircraft nearby, window, Home Assistant ---
+static bool     s_stOnly = false;
+static uint8_t  s_stDbz  = STORM_DBZ_DEFAULT;
+static uint16_t s_stKm   = STORM_KM_DEFAULT;
+static bool     s_paOn   = false;
+static uint16_t s_paKm   = PLANE_ALERT_KM_DEFAULT;
+static uint16_t s_paSec  = PLANE_ALERT_SEC_DEFAULT;
+static bool     s_winOn  = false;
+static uint16_t s_winAz  = WINDOW_AZ_DEFAULT;
+static uint16_t s_winW   = WINDOW_WIDTH_DEFAULT;
+static uint16_t s_winKm  = WINDOW_KM_DEFAULT;
+static bool     s_haOn   = HA_DEFAULT_ON;
 
 // --- Aircraft filters ---
 static uint16_t s_altMin = 0;
@@ -123,6 +146,20 @@ void Settings_Begin() {
     s_secStyle = prefs.getUChar("secSt", SEC_STYLE_DOTS);
     s_clockCol = prefs.getUShort("clkC", 0xFFFF);
     s_secCol   = prefs.getUShort("secC", 0x05FF);
+    s_clkFont  = prefs.getUChar("clkF", CLOCK_FONT_DEFAULT);
+    for (int i = 0; i < 3; i++) s_altBand[i] = prefs.getUShort(ALT_BAND_KEY[i], s_altBand[i]);
+    for (int i = 0; i < 4; i++) s_altCol[i]  = prefs.getUShort(ALT_COL_KEY[i], s_altCol[i]);
+    s_stOnly = prefs.getBool("stOnly", false);
+    s_stDbz  = prefs.getUChar("stDbz", STORM_DBZ_DEFAULT);
+    s_stKm   = prefs.getUShort("stKm", STORM_KM_DEFAULT);
+    s_paOn   = prefs.getBool("paOn", false);
+    s_paKm   = prefs.getUShort("paKm", PLANE_ALERT_KM_DEFAULT);
+    s_paSec  = prefs.getUShort("paSec", PLANE_ALERT_SEC_DEFAULT);
+    s_winOn  = prefs.getBool("winOn", false);
+    s_winAz  = prefs.getUShort("winAz", WINDOW_AZ_DEFAULT);
+    s_winW   = prefs.getUShort("winW", WINDOW_WIDTH_DEFAULT);
+    s_winKm  = prefs.getUShort("winKm", WINDOW_KM_DEFAULT);
+    s_haOn   = prefs.getBool("haOn", HA_DEFAULT_ON);
     s_altMin = prefs.getUShort("altLo", 0);
     s_altMax = prefs.getUShort("altHi", 60000);
     s_onlyCs = prefs.getBool("onlyCs", false);
@@ -133,12 +170,21 @@ void Settings_Begin() {
     s_scr    = prefs.getUChar("scr", SCREEN_PLANES_I);
     s_top    = prefs.getUShort("topb", 0);
     prefs.getString("pw", s_pw, sizeof(s_pw));
-    prefs.getString("ssid", s_ssid, sizeof(s_ssid));
-    prefs.getString("wpass", s_wpass, sizeof(s_wpass));
+    for (int i = 0; i < WIFI_SLOTS; i++) {
+      // isKey() first: getString() on a missing key logs an error line for
+      // every empty slot on every boot.
+      if (prefs.isKey(SSID_KEY[i])) prefs.getString(SSID_KEY[i], s_ssid[i], sizeof(s_ssid[i]));
+      if (prefs.isKey(PASS_KEY[i])) prefs.getString(PASS_KEY[i], s_wpass[i], sizeof(s_wpass[i]));
+    }
     prefs.end();
   }
   if (s_altMax == 0) s_altMax = 60000;
   if (s_autoRot > 3600) s_autoRot = 3600;
+  if (s_radarSrc > RADAR_SRC_MAX) s_radarSrc = RADAR_SRC_CHMU;
+  if (s_clkFont > CLOCK_FONT_MAX) s_clkFont = CLOCK_FONT_DEFAULT;
+  if (!(s_altBand[0] < s_altBand[1] && s_altBand[1] < s_altBand[2])) {
+    s_altBand[0] = ALT_BAND1_M_DEFAULT; s_altBand[1] = ALT_BAND2_M_DEFAULT; s_altBand[2] = ALT_BAND3_M_DEFAULT;
+  }
   if (migrateRotate && prefs.begin(NS, false)) {
     prefs.putUShort("autoRS", s_autoRot);
     prefs.remove("autoR");           // the old key would only confuse later
@@ -149,23 +195,69 @@ void Settings_Begin() {
 }
 
 // --- WiFi -------------------------------------------------------------------
-const char* Settings_WifiSsid() { return s_ssid; }
-const char* Settings_WifiPass() { return s_wpass; }
-bool        Settings_HasWifi()  { return s_ssid[0] != '\0'; }
-
-void Settings_SetWifi(const char* ssid, const char* pass) {
-  if (!ssid) ssid = "";
-  if (!pass) pass = "";
-  strncpy(s_ssid,  ssid, sizeof(s_ssid) - 1);   s_ssid[sizeof(s_ssid) - 1] = '\0';
-  strncpy(s_wpass, pass, sizeof(s_wpass) - 1);  s_wpass[sizeof(s_wpass) - 1] = '\0';
-  if (prefs.begin(NS, false)) {
-    prefs.putString("ssid", s_ssid);
-    prefs.putString("wpass", s_wpass);
-    prefs.end();
-  }
+const char* Settings_WifiSsid(uint8_t slot) { return slot < WIFI_SLOTS ? s_ssid[slot]  : ""; }
+const char* Settings_WifiPass(uint8_t slot) { return slot < WIFI_SLOTS ? s_wpass[slot] : ""; }
+bool Settings_HasWifi() {
+  for (int i = 0; i < WIFI_SLOTS; i++) if (s_ssid[i][0]) return true;
+  return false;
 }
 
-void Settings_ClearWifi() { Settings_SetWifi("", ""); }
+static void storeWifiSlots() {
+  if (!prefs.begin(NS, false)) return;
+  for (int i = 0; i < WIFI_SLOTS; i++) {
+    prefs.putString(SSID_KEY[i], s_ssid[i]);
+    prefs.putString(PASS_KEY[i], s_wpass[i]);
+  }
+  prefs.end();
+}
+
+static void copyStr(char* dst, size_t cap, const char* src) {
+  strncpy(dst, src ? src : "", cap - 1);
+  dst[cap - 1] = '\0';
+}
+
+void Settings_SetWifiSlot(uint8_t slot, const char* ssid, const char* pass) {
+  if (slot >= WIFI_SLOTS) return;
+  if (!ssid || !*ssid) {
+    s_ssid[slot][0] = '\0';
+    s_wpass[slot][0] = '\0';
+  } else {
+    // A renamed slot with no password typed keeps nothing: the old password
+    // belonged to a different network.
+    const bool sameNet = strcmp(s_ssid[slot], ssid) == 0;
+    copyStr(s_ssid[slot], sizeof(s_ssid[slot]), ssid);
+    if (pass)          copyStr(s_wpass[slot], sizeof(s_wpass[slot]), pass);
+    else if (!sameNet) s_wpass[slot][0] = '\0';
+  }
+  storeWifiSlots();
+}
+
+void Settings_SetWifi(const char* ssid, const char* pass) {
+  if (!ssid || !*ssid) return;
+  // Already known: just the password.
+  for (int i = 0; i < WIFI_SLOTS; i++) {
+    if (strcmp(s_ssid[i], ssid) == 0) {
+      copyStr(s_wpass[i], sizeof(s_wpass[i]), pass);
+      storeWifiSlots();
+      return;
+    }
+  }
+  // New: first place, the others move down and the last one falls off. The
+  // network just typed in is the one the user wants now.
+  for (int i = WIFI_SLOTS - 1; i > 0; i--) {
+    memcpy(s_ssid[i],  s_ssid[i - 1],  sizeof(s_ssid[i]));
+    memcpy(s_wpass[i], s_wpass[i - 1], sizeof(s_wpass[i]));
+  }
+  copyStr(s_ssid[0],  sizeof(s_ssid[0]),  ssid);
+  copyStr(s_wpass[0], sizeof(s_wpass[0]), pass);
+  storeWifiSlots();
+}
+
+void Settings_ClearWifi() {
+  memset(s_ssid, 0, sizeof(s_ssid));
+  memset(s_wpass, 0, sizeof(s_wpass));
+  storeWifiSlots();
+}
 
 // --- Location ---------------------------------------------------------------
 double Settings_Lat() { return s_lat; }
@@ -253,9 +345,62 @@ void     Settings_SetAutoRotateSec(uint16_t s) {
 // --- Weather radar ----------------------------------------------------------
 uint8_t Settings_RadarSource() { return s_radarSrc; }
 void    Settings_SetRadarSource(uint8_t s) {
-  s_radarSrc = (s == RADAR_SRC_RAINVIEWER) ? RADAR_SRC_RAINVIEWER : RADAR_SRC_CHMU;
+  s_radarSrc = (s <= RADAR_SRC_MAX) ? s : RADAR_SRC_CHMU;
   putU8("radSrc", s_radarSrc);
 }
+bool Settings_RadarIsChmu() { return s_radarSrc != RADAR_SRC_RAINVIEWER; }
+
+// --- Storm watch ------------------------------------------------------------
+bool     Settings_StormOnly() { return s_stOnly; }
+void     Settings_SetStormOnly(bool on) { s_stOnly = on; putBool("stOnly", on); }
+uint8_t  Settings_StormDbz() { return s_stDbz; }
+void     Settings_SetStormDbz(uint8_t dbz) {
+  if (dbz < 4) dbz = 4;
+  if (dbz > 60) dbz = 60;
+  s_stDbz = dbz; putU8("stDbz", dbz);
+}
+uint16_t Settings_StormKm() { return s_stKm; }
+void     Settings_SetStormKm(uint16_t km) {
+  if (km < 5) km = 5;
+  if (km > 250) km = 250;          // CHMU covers about 500 x 280 km
+  s_stKm = km; putU16("stKm", km);
+}
+
+// --- Aircraft nearby, window ------------------------------------------------
+bool     Settings_PlaneAlert() { return s_paOn; }
+void     Settings_SetPlaneAlert(bool on) { s_paOn = on; putBool("paOn", on); }
+uint16_t Settings_PlaneAlertKm() { return s_paKm; }
+void     Settings_SetPlaneAlertKm(uint16_t km) {
+  if (km < 1) km = 1;
+  if (km > 50) km = 50;
+  s_paKm = km; putU16("paKm", km);
+}
+uint16_t Settings_PlaneAlertSec() { return s_paSec; }
+void     Settings_SetPlaneAlertSec(uint16_t s) {
+  if (s < 5) s = 5;
+  if (s > 300) s = 300;
+  s_paSec = s; putU16("paSec", s);
+}
+bool     Settings_WindowOn() { return s_winOn; }
+void     Settings_SetWindowOn(bool on) { s_winOn = on; putBool("winOn", on); }
+uint16_t Settings_WindowAz() { return s_winAz; }
+void     Settings_SetWindowAz(uint16_t deg) { deg %= 360; s_winAz = deg; putU16("winAz", deg); }
+uint16_t Settings_WindowWidth() { return s_winW; }
+void     Settings_SetWindowWidth(uint16_t deg) {
+  if (deg < 10) deg = 10;
+  if (deg > 300) deg = 300;
+  s_winW = deg; putU16("winW", deg);
+}
+uint16_t Settings_WindowKm() { return s_winKm; }
+void     Settings_SetWindowKm(uint16_t km) {
+  if (km < 1) km = 1;
+  if (km > 100) km = 100;
+  s_winKm = km; putU16("winKm", km);
+}
+
+// --- Home Assistant ---------------------------------------------------------
+bool Settings_HaEnabled() { return s_haOn; }
+void Settings_SetHaEnabled(bool on) { s_haOn = on; putBool("haOn", on); }
 
 bool Settings_MeteoLegend() { return s_mtLegend; }
 void Settings_SetMeteoLegend(bool on) { s_mtLegend = on; putBool("mtLeg", on); }
@@ -303,6 +448,30 @@ uint16_t Settings_ClockColor() { return s_clockCol; }
 void     Settings_SetClockColor(uint16_t c) { s_clockCol = c; putU16("clkC", c); }
 uint16_t Settings_SecondsColor() { return s_secCol; }
 void     Settings_SetSecondsColor(uint16_t c) { s_secCol = c; putU16("secC", c); }
+uint8_t  Settings_ClockFont() { return s_clkFont; }
+void     Settings_SetClockFont(uint8_t f) {
+  if (f > CLOCK_FONT_MAX) f = CLOCK_FONT_DEFAULT;
+  s_clkFont = f; putU8("clkF", f);
+}
+
+// --- Altitude colours -------------------------------------------------------
+uint16_t Settings_AltBandM(uint8_t i) { return i < 3 ? s_altBand[i] : 0; }
+void     Settings_SetAltBandsM(uint16_t b0, uint16_t b1, uint16_t b2) {
+  // Out of order is refused as a whole rather than half-applied: the bands
+  // would overlap and an aircraft would fit two colours at once.
+  if (!(b0 > 0 && b0 < b1 && b1 < b2 && b2 <= 20000)) return;
+  s_altBand[0] = b0; s_altBand[1] = b1; s_altBand[2] = b2;
+  if (prefs.begin(NS, false)) {
+    for (int i = 0; i < 3; i++) prefs.putUShort(ALT_BAND_KEY[i], s_altBand[i]);
+    prefs.end();
+  }
+}
+uint16_t Settings_AltColor(uint8_t band) { return band < 4 ? s_altCol[band] : 0xFFFF; }
+void     Settings_SetAltColor(uint8_t band, uint16_t c) {
+  if (band >= 4) return;
+  s_altCol[band] = c;
+  putU16(ALT_COL_KEY[band], c);
+}
 
 // --- Aircraft filters -------------------------------------------------------
 uint16_t Settings_AltMinFt() { return s_altMin; }
@@ -392,6 +561,24 @@ void Settings_ToJson(JsonObject o) {
   o["secStyle"] = s_secStyle;
   o["clockColor"] = s_clockCol;
   o["secColor"] = s_secCol;
+  o["clockFont"] = s_clkFont;
+  {
+    JsonArray b = o["altBands"].to<JsonArray>();
+    for (int i = 0; i < 3; i++) b.add(s_altBand[i]);
+    JsonArray c = o["altColors"].to<JsonArray>();
+    for (int i = 0; i < 4; i++) c.add(s_altCol[i]);
+  }
+  o["stormOnly"] = s_stOnly;
+  o["stormDbz"]  = s_stDbz;
+  o["stormKm"]   = s_stKm;
+  o["planeAlert"]    = s_paOn;
+  o["planeAlertKm"]  = s_paKm;
+  o["planeAlertSec"] = s_paSec;
+  o["windowOn"]    = s_winOn;
+  o["windowAz"]    = s_winAz;
+  o["windowWidth"] = s_winW;
+  o["windowKm"]    = s_winKm;
+  o["haEnabled"]   = s_haOn;
   o["altMin"] = s_altMin;
   o["altMax"] = s_altMax;
   o["onlyCallsign"] = s_onlyCs;
@@ -439,6 +626,34 @@ bool Settings_FromJson(JsonObjectConst in) {
   setIf("secStyle",     [](JsonVariantConst v){ Settings_SetSecondsStyle(v.as<uint8_t>()); });
   setIf("clockColor",   [](JsonVariantConst v){ Settings_SetClockColor(v.as<uint16_t>()); });
   setIf("secColor",     [](JsonVariantConst v){ Settings_SetSecondsColor(v.as<uint16_t>()); });
+  setIf("clockFont",    [](JsonVariantConst v){ Settings_SetClockFont(v.as<uint8_t>()); });
+  setIf("stormOnly",    [](JsonVariantConst v){ Settings_SetStormOnly(v.as<bool>()); });
+  setIf("stormDbz",     [](JsonVariantConst v){ Settings_SetStormDbz(v.as<uint8_t>()); });
+  setIf("stormKm",      [](JsonVariantConst v){ Settings_SetStormKm(v.as<uint16_t>()); });
+  setIf("planeAlert",   [](JsonVariantConst v){ Settings_SetPlaneAlert(v.as<bool>()); });
+  setIf("planeAlertKm", [](JsonVariantConst v){ Settings_SetPlaneAlertKm(v.as<uint16_t>()); });
+  setIf("planeAlertSec",[](JsonVariantConst v){ Settings_SetPlaneAlertSec(v.as<uint16_t>()); });
+  setIf("windowOn",     [](JsonVariantConst v){ Settings_SetWindowOn(v.as<bool>()); });
+  setIf("windowAz",     [](JsonVariantConst v){ Settings_SetWindowAz(v.as<uint16_t>()); });
+  setIf("windowWidth",  [](JsonVariantConst v){ Settings_SetWindowWidth(v.as<uint16_t>()); });
+  setIf("windowKm",     [](JsonVariantConst v){ Settings_SetWindowKm(v.as<uint16_t>()); });
+  setIf("haEnabled",    [](JsonVariantConst v){ Settings_SetHaEnabled(v.as<bool>()); });
+
+  // Altitude bands go in as a set of three, for the same reason the filter
+  // range goes in as a pair: applied one at a time they would pass through an
+  // out-of-order state and be refused.
+  {
+    JsonArrayConst b = in["altBands"];
+    if (!b.isNull() && b.size() == 3) {
+      Settings_SetAltBandsM(b[0].as<uint16_t>(), b[1].as<uint16_t>(), b[2].as<uint16_t>());
+      changed = true;
+    }
+    JsonArrayConst c = in["altColors"];
+    if (!c.isNull()) {
+      for (size_t i = 0; i < 4 && i < c.size(); i++) Settings_SetAltColor((uint8_t)i, c[i].as<uint16_t>());
+      changed = true;
+    }
+  }
   setIf("onlyCallsign", [](JsonVariantConst v){ Settings_SetOnlyWithCallsign(v.as<bool>()); });
   setIf("squawkAlert",  [](JsonVariantConst v){ Settings_SetSquawkAlert(v.as<bool>()); });
   setIf("watch",        [](JsonVariantConst v){ Settings_SetWatchCallsign(v.as<const char*>()); });
@@ -495,9 +710,18 @@ void Settings_ClearAll() {
   s_priceFee = 0; s_priceVat = 0;
   strncpy(s_mixCC, MIX_COUNTRY_DEFAULT, sizeof(s_mixCC) - 1);
   s_secStyle = SEC_STYLE_DOTS; s_clockCol = 0xFFFF; s_secCol = 0x05FF;
+  s_clkFont = CLOCK_FONT_DEFAULT;
+  s_altBand[0] = ALT_BAND1_M_DEFAULT; s_altBand[1] = ALT_BAND2_M_DEFAULT; s_altBand[2] = ALT_BAND3_M_DEFAULT;
+  s_altCol[0] = ALT_COL0_DEFAULT; s_altCol[1] = ALT_COL1_DEFAULT;
+  s_altCol[2] = ALT_COL2_DEFAULT; s_altCol[3] = ALT_COL3_DEFAULT;
+  s_stOnly = false; s_stDbz = STORM_DBZ_DEFAULT; s_stKm = STORM_KM_DEFAULT;
+  s_paOn = false; s_paKm = PLANE_ALERT_KM_DEFAULT; s_paSec = PLANE_ALERT_SEC_DEFAULT;
+  s_winOn = false; s_winAz = WINDOW_AZ_DEFAULT; s_winW = WINDOW_WIDTH_DEFAULT; s_winKm = WINDOW_KM_DEFAULT;
+  s_haOn = HA_DEFAULT_ON;
   s_altMin = 0; s_altMax = 60000; s_onlyCs = false; s_sqAlert = true; s_watch[0] = '\0';
   s_rngP = 1; s_rngM = 1; s_scr = SCREEN_PLANES_I; s_top = 0;
   s_pw[0] = '\0';
-  s_ssid[0] = '\0'; s_wpass[0] = '\0';
+  memset(s_ssid, 0, sizeof(s_ssid));
+  memset(s_wpass, 0, sizeof(s_wpass));
   s_uiDirty = false;
 }

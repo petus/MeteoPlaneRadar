@@ -7,6 +7,7 @@
 //  Web:     https://chiptron.cz
 //  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
 // =============================================================================
+#include "AAFont.h"   // CZT(): accents with the smooth fonts
 #include "ScreenPlanes.h"
 #include "ADSB.h"
 #include "Settings.h"
@@ -18,6 +19,8 @@
 #include "Lang.h"
 #include "Status.h"
 #include "Display_ST7701.h"
+#include "PlaneIcon.h"
+#include "Geo.h"
 
 #include <WiFi.h>
 #include <math.h>
@@ -163,51 +166,22 @@ static void cityProject(float lat, float lon, int* sx, int* sy) {
 // An aircraft reporting no altitude at all (altFt == 0 and not on the ground)
 // is drawn grey rather than being forced into the "low" band, which would
 // otherwise paint every unknown target an alarming red.
+//
+// 0.8.0: both the three boundaries and the four colours are settings now. The
+// defaults are the values above, so the radar looks exactly as it did until
+// someone changes them.
 static uint16_t altColor(float altFt, bool known) {
   if (!known) return C_GRAY;
-  float km = altFt * 0.0003048f;      // feet -> kilometres
-  if (km <  2.0f) return C_RED;
-  if (km <  6.0f) return C_ORANGE;
-  if (km < 10.0f) return C_YELLOW;
-  return C_BLUE;
+  const float m = altFt * 0.3048f;    // feet -> metres
+  for (uint8_t i = 0; i < 3; i++)
+    if (m < (float)Settings_AltBandM(i)) return Settings_AltColor(i);
+  return Settings_AltColor(3);
 }
 
-// Aircraft icon - a winged arrow, rotated to match the ground track.
-// Filled polygon; the nose points "forward" (locally up, fwd positive).
-// When the track is unknown (hasTrack=false), a circle is drawn instead.
-static void drawPlane(int x, int y, float trackDeg, bool hasTrack, uint16_t col) {
-  if (!hasTrack) {
-    // Track unknown - circle with a dot (orientation cannot be determined).
-    gfx->drawCircle(x, y, 7, col);
-    gfx->fillCircle(x, y, 2, col);
-    return;
-  }
-  float a = trackDeg * 0.0174532925f;
-  float ca = cosf(a), sa = sinf(a);
-  // Local coordinates: right = to the right of the nose, fwd = forward (towards it).
-  // Compass rotation: track 0 = up, 90 = right (east).
-  //   screen_x = x + right*cos(a) + fwd*sin(a)
-  //   screen_y = y - right*... ; derived so that fwd follows the track:
-  //   nose (right=0, fwd=L) -> (x + L*sin(a), y - L*cos(a))
-  auto rot = [&](float right, float fwd, int* ox, int* oy) {
-    *ox = x + (int)(right * ca + fwd * sa);
-    *oy = y + (int)(right * sa - fwd * ca);
-  };
-  // Arrow vertices (right, fwd). Nose ahead (fwd=+12), tail behind (fwd=-12).
-  // Outline order: nose, right side, right wingtip, fuselage, right tailplane,
-  //                rear centre, left tailplane, fuselage, left wingtip, left side
-  const float P[10][2] = {
-    { 0,  12}, { 3,  1}, { 13, -8}, { 3, -5}, { 3, -7},
-    { 0, -12}, {-3, -7}, {-3, -5}, {-13, -8}, {-3,  1}
-  };
-  int px[10], py[10];
-  for (int i = 0; i < 10; i++) rot(P[i][0], P[i][1], &px[i], &py[i]);
-
-  // Fill as a triangle fan from the centre of the icon.
-  for (int i = 0; i < 10; i++) {
-    int j = (i + 1) % 10;
-    gfx->fillTriangle(x, y, px[i], py[i], px[j], py[j], col);
-  }
+// Aircraft icon. The shape now follows the airframe - see PlaneIcon.h. The
+// original winged arrow is still there for anything that cannot be classified.
+static void drawPlane(int x, int y, float trackDeg, bool hasTrack, uint8_t kind, uint16_t col) {
+  PlaneIcon_Draw(x, y, trackDeg, hasTrack, kind, col);
 }
 
 // --- Filters ----------------------------------------------------------------
@@ -242,6 +216,39 @@ void ScreenPlanes_Enter() {
   if (s_rangeIdx >= RANGE_COUNT) s_rangeIdx = 1;   // guard against a stale value
   s_nextFetch = 0;
 }
+
+// --- Aircraft-nearby alert (0.8.0) -------------------------------------------
+// The screen is brought up for a few seconds with the detail of the aircraft
+// that triggered it already open. The range is picked to fit that aircraft and
+// is NOT remembered - when the alert ends the user's own range comes back.
+static bool s_alert = false;
+static bool s_alertWindow = false;
+static float s_alertKm = 0;
+
+void ScreenPlanes_AlertBegin(const char* hex, float distKm, bool inWindow) {
+  s_alert = true;
+  s_alertWindow = inWindow;
+  s_alertKm = distKm;
+  // Smallest range that shows the aircraft with a little room to spare.
+  int idx = RANGE_COUNT - 1;
+  for (int i = 0; i < RANGE_COUNT; i++) {
+    if (RANGES_KM[i] >= distKm * 1.15f) { idx = i; break; }
+  }
+  s_rangeIdx = idx;
+  s_nextFetch = 0;
+  if (hex && *hex) selectHex(hex);
+}
+
+void ScreenPlanes_AlertEnd() {
+  if (!s_alert) return;
+  s_alert = false;
+  selectNone("konec upozorneni");
+  s_rangeIdx = Settings_PlaneRange();
+  if (s_rangeIdx >= RANGE_COUNT) s_rangeIdx = 1;
+  s_nextFetch = 0;
+}
+
+bool ScreenPlanes_AlertActive() { return s_alert; }
 
 bool ScreenPlanes_Tick() {
   if (WiFi.status() != WL_CONNECTED) { s_status = T(S_WIFI_WAIT); return false; }
@@ -311,6 +318,7 @@ bool ScreenPlanes_HandleTap(int x, int y) {
 // radius. Ignored while the detail panel is open (close it first).
 void ScreenPlanes_ChangeRange(int dir) {
   if (ScreenPlanes_DetailOpen()) return;
+  s_alert = false;                       // the user has taken over
   s_rangeIdx = (s_rangeIdx + dir + RANGE_COUNT) % RANGE_COUNT;
   Settings_SetPlaneRange(s_rangeIdx);   // remember across restarts (debounced)
   Serial.printf("ADSB range: %.0f km\n", currentRange());
@@ -382,10 +390,35 @@ void ScreenPlanes_Draw() {
   gfx->drawFastHLine(R_CX - 8, R_CY, 16, C_WHITE);
   gfx->drawFastVLine(R_CX, R_CY - 8, 16, C_WHITE);
 
+  // --- Window view (0.8.0) ---
+  // The sector visible from the window, so the alert's idea of "in view" can
+  // be checked against the map. Two dim rays and a dotted arc at the distance
+  // set as the limit (or the edge of the radar, if that is closer).
+  if (Settings_WindowOn()) {
+    const float half = Settings_WindowWidth() * 0.5f;
+    const float a0 = (float)Settings_WindowAz() - half;
+    const float a1 = (float)Settings_WindowAz() + half;
+    float rr = (float)R_RADIUS * (float)Settings_WindowKm() / range;
+    if (rr > R_RADIUS) rr = R_RADIUS;
+    const uint16_t wc = 0x0339;                    // dim teal
+    for (int e = 0; e < 2; e++) {
+      const float b = ((e ? a1 : a0) - (float)s_topDeg) * 0.0174532925f;
+      gfx->drawLine(R_CX, R_CY, R_CX + (int)(rr * sinf(b)), R_CY - (int)(rr * cosf(b)), wc);
+    }
+    for (float d = a0; d <= a1; d += 3.0f) {
+      const float b = (d - (float)s_topDeg) * 0.0174532925f;
+      gfx->drawPixel(R_CX + (int)(rr * sinf(b)), R_CY - (int)(rr * cosf(b)), wc);
+    }
+  }
+
   // Aircraft.
   int shown = 0;
   const Aircraft* list = ADSB_List();
   int n = ADSB_Count();
+  // 0.8.4: when adsb.fi has not answered for a while, the last aircraft are
+  // shown grey, and after ADSB_HIDE_MS not at all - see Config.h.
+  const bool stale = ADSB_DataStale();
+  if (ADSB_DataHidden()) n = 0;
   s_planeN = n;
 
   // Resolve the selection once per frame. If the aircraft has left the area it
@@ -435,8 +468,9 @@ void ScreenPlanes_Draw() {
     // otherwise the aircraft would point the wrong direction.
     float screenTrack = list[i].track - (float)s_topDeg;
     while (screenTrack < 0.0f) screenTrack += 360.0f;
-    drawPlane(sx, sy, screenTrack, list[i].hasTrack,
-              altColor(list[i].altFt, altKnown));
+    // Stale data is drawn grey: the positions are where the aircraft WERE.
+    drawPlane(sx, sy, screenTrack, list[i].hasTrack, list[i].icon,
+              stale ? C_GRAY : altColor(list[i].altFt, altKnown));
     // Label under the icon: the callsign, or the ICAO address when the aircraft
     // broadcasts none. The fallback lives HERE and nowhere else - Aircraft::
     // callsign is deliberately left empty in that case, because it is what gets
@@ -479,6 +513,17 @@ void ScreenPlanes_Draw() {
     int tw = Layout_TextW(sub, 2);
     gfx->fillRect(LCD_WIDTH / 2 - tw / 2 - 6, LY_SUB - 4, tw + 12, 20, C_RED);
     UI_TextCentered(sub, LY_SUB - 1, C_WHITE, 2);
+  } else if (WiFi.status() == WL_CONNECTED && stale && ADSB_DataAgeMs() != 0xFFFFFFFFUL) {
+    // How old the grey aircraft are, and how long until the next attempt.
+    const unsigned long ageMin = ADSB_DataAgeMs() / 60000UL;
+    const unsigned long pause = ADSB_PauseLeftMs() / 1000UL;
+    if (ADSB_DataHidden()) snprintf(sub, sizeof(sub), "%s", T(S_NO_PLANE_DATA));
+    else                   snprintf(sub, sizeof(sub), "%s: %lu %s", T(S_OLD_PLANES), ageMin ? ageMin : 1, T(S_MIN));
+    if (pause) {
+      const size_t l = strlen(sub);
+      snprintf(sub + l, sizeof(sub) - l, " (%s %lu s)", T(S_PAUSE), pause);
+    }
+    UI_TextCentered(sub, LY_SUB, C_YELLOW, 1);
   } else if (WiFi.status() != WL_CONNECTED || !s_dataOk) {
     UI_TextCentered(s_status.c_str(), LY_SUB, C_YELLOW, 1);
   } else {
@@ -493,8 +538,14 @@ void ScreenPlanes_Draw() {
   // below the aircraft count, where the round panel still has room - the bottom
   // of the screen is already taken by the range readout.
   {
-    const uint16_t cols[4] = {C_RED, C_ORANGE, C_YELLOW, C_BLUE};
-    const char*    bounds[3] = {"2", "6", "10"};   // km, at the band edges
+    uint16_t cols[4];
+    char bounds[3][8];                              // km, at the band edges
+    for (int i = 0; i < 4; i++) cols[i] = Settings_AltColor(i);
+    for (int i = 0; i < 3; i++) {
+      const uint16_t m = Settings_AltBandM(i);
+      if (m % 1000 == 0) snprintf(bounds[i], sizeof(bounds[i]), "%u", (unsigned)(m / 1000));
+      else               snprintf(bounds[i], sizeof(bounds[i]), "%.1f", m / 1000.0f);
+    }
     const int sw = 26;                 // swatch width
     const int barW = 4 * sw;
     const int lx = R_CX - barW / 2;
@@ -511,7 +562,7 @@ void ScreenPlanes_Draw() {
     gfx->setTextColor(C_GRAY);
     for (int i = 0; i < 3; i++) {
       int edge = lx + (i + 1) * sw;              // border between band i and i+1
-      int tw = strlen(bounds[i]) * 6;
+      int tw = Layout_TextW(bounds[i], 1);
       gfx->setCursor(edge - tw / 2, ly + 10);
       gfx->print(bounds[i]);
     }
@@ -677,12 +728,26 @@ void ScreenPlanes_Draw() {
     }
     gfx->setTextSize(2); gfx->setTextColor(C_WHITE);
 
+    // Why the panel opened by itself, and how far away the aircraft is.
+    if (s_alert) {
+      float dkm = s_alertKm;
+      Geo_DistBearing(Settings_Lat(), Settings_Lon(), ac.lat, ac.lon, &dkm, nullptr);
+      char note[40];
+      const bool en = (Lang_Get() == LANG_EN);
+      snprintf(note, sizeof(note), "%s  %.1f km",
+               s_alertWindow ? (en ? "in the window" : CZT("v okne", "v okně"))
+                             : (en ? "nearby" : CZT("nablizku", "nablízku")), dkm);
+      gfx->setTextSize(1); gfx->setTextColor(C_CYAN);
+      gfx->setCursor(px + 18, py + ph - 18);
+      gfx->print(note);
+    }
+
     // While the aircraft is missing from the data (grace period) say so, so the
     // frozen values are not mistaken for live ones.
     if (signalLost) {
       gfx->setTextSize(1); gfx->setTextColor(C_YELLOW);
       const char* lost = T(S_SIGNAL_LOST);
-      gfx->setCursor(px + pw - 18 - (int)strlen(lost) * 6, py + ph - 18);
+      gfx->setCursor(px + pw - 18 - Layout_TextW(lost, 1), py + ph - 18);
       gfx->print(lost);
     }
 

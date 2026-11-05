@@ -20,6 +20,7 @@
 #include "Status.h"          // one-line health note for the web status page
 #include "Config.h"          // SQUAWK_*
 #include "NetSink.h"        // chunked-safe body reader
+#include "PlaneIcon.h"      // icon kind from the type code
 
 static const float KM_PER_NM = 1.852f;
 
@@ -33,6 +34,48 @@ static Aircraft s_tmp[ADSB_MAX];
 static void (*s_poll)() = nullptr;
 
 void ADSB_SetPollFn(void (*fn)()) { s_poll = fn; }
+
+// --- Overload protection ---------------------------------------------------
+static bool          s_everOk     = false;
+static unsigned long s_lastOkMs   = 0;
+static unsigned long s_blockUntil = 0;     // gate: no request before this
+static bool          s_blocked    = false;
+static uint8_t       s_failCount  = 0;
+static int           s_lastCode   = 0;
+
+unsigned long ADSB_DataAgeMs() { return s_everOk ? millis() - s_lastOkMs : 0xFFFFFFFFUL; }
+bool ADSB_DataStale()  { return ADSB_DataAgeMs() > ADSB_STALE_MS; }
+bool ADSB_DataHidden() { return ADSB_DataAgeMs() > ADSB_HIDE_MS; }
+int  ADSB_LastHttpCode() { return s_lastCode; }
+unsigned long ADSB_PauseLeftMs() {
+  if (!s_blocked) return 0;
+  const long left = (long)(s_blockUntil - millis());
+  if (left <= 0) { s_blocked = false; return 0; }
+  return (unsigned long)left;
+}
+
+// One failed poll (after its attempts). retryAfterS > 0 = the server said so.
+static void noteFailure(long retryAfterS) {
+  if (s_failCount < 10) s_failCount++;
+  unsigned long pause = ADSB_BACKOFF_BASE_MS << (s_failCount - 1);
+  if (pause > ADSB_BACKOFF_MAX_MS) pause = ADSB_BACKOFF_MAX_MS;
+  if (retryAfterS > 0) {
+    if (retryAfterS > ADSB_RETRY_AFTER_MAX_S) retryAfterS = ADSB_RETRY_AFTER_MAX_S;
+    if ((unsigned long)retryAfterS * 1000UL > pause) pause = (unsigned long)retryAfterS * 1000UL;
+  }
+  s_blockUntil = millis() + pause;
+  s_blocked = true;
+  Serial.printf("ADSB: chyba %d, %u. v rade, pauza %lu s\n",
+                s_lastCode, (unsigned)s_failCount, pause / 1000UL);
+  Status_Set(ST_ADSB, "chyba %d, pauza %lu s", s_lastCode, pause / 1000UL);
+}
+
+static void noteSuccess() {
+  s_everOk = true;
+  s_lastOkMs = millis();
+  s_failCount = 0;
+  s_blocked = false;
+}
 int  ADSB_Count() { return s_count; }
 const Aircraft* ADSB_List() { return s_list; }
 
@@ -169,6 +212,7 @@ static void fillFields(JsonObject o) {
   o["t"]            = true;
   o["r"]            = true;   // registration - free, in the same answer
   o["squawk"]       = true;
+  o["category"]     = true;   // emitter category - icon fallback
 }
 
 static void buildFilter(JsonDocument& filter) {
@@ -198,6 +242,10 @@ bool ADSB_Fetch(double lat, double lon, float radiusKm) {
     return false;
   }
   if (!Net_HeapOk("ADSB")) { Status_Set(ST_ADSB, "malo pameti"); return false; }
+  // The gate. Returning at once is the point: the caller's screen and the
+  // cycling keep running instead of waiting on a server that is not answering.
+  if (ADSB_PauseLeftMs() > 0) return false;
+  long retryAfter = 0;
 
   float distNm = radiusKm / KM_PER_NM;
   char url[128];
@@ -222,12 +270,13 @@ bool ADSB_Fetch(double lat, double lon, float radiusKm) {
     if (!http.begin(client, url)) {
       Serial.println("ADSB: begin failed");
       if (attempt < MAX_ATTEMPTS) { delay(200); continue; }
+      noteFailure(0);
       return false;
     }
     // The response header carries the current time - that is where the clock
     // comes from, so ask HTTPClient to keep it (see Outside.h).
-    static const char* WANTED[] = { "Date" };
-    http.collectHeaders(WANTED, 1);
+    static const char* WANTED[] = { "Date", "Retry-After" };
+    http.collectHeaders(WANTED, 2);
     // Identify ourselves - adsb.fi's free API asks callers to be polite, and
     // adsb.lol flatly refuses a User-Agent without contact info (see Config.h).
     // One string for both, so there is one place to change.
@@ -240,10 +289,17 @@ bool ADSB_Fetch(double lat, double lon, float radiusKm) {
     int code = http.GET();
     // Seed the clock even from a non-OK answer - the header is there either way.
     if (http.hasHeader("Date")) Outside_NoteHttpDate(http.header("Date").c_str());
+    s_lastCode = code > 0 ? code : 0;
     if (code != HTTP_CODE_OK) {
       Serial.printf("ADSB: HTTP %d (attempt %d)\n", code, attempt);
+      if (http.hasHeader("Retry-After")) retryAfter = http.header("Retry-After").toInt();
       http.end();
-      if (attempt < MAX_ATTEMPTS) { delay(200); continue; }
+      // Too many requests, or the server itself in trouble: asking again 200 ms
+      // later only adds to the pile. A dropped connection (code < 0) or a
+      // stray 4xx is still worth the one quick retry.
+      const bool overloaded = (code == 429 || code >= 500);
+      if (!overloaded && attempt < MAX_ATTEMPTS) { delay(200); continue; }
+      noteFailure(retryAfter);
       return false;   // keep last good data
     }
 
@@ -254,11 +310,13 @@ bool ADSB_Fetch(double lat, double lon, float radiusKm) {
     if (len < 0) {
       Serial.println("ADSB: body read failed");
       if (attempt < MAX_ATTEMPTS) { delay(200); continue; }
+      noteFailure(0);
       return false;
     }
     if (len < 8) {   // empty / nonsense
       Serial.printf("ADSB: short body %ld (attempt %d)\n", len, attempt);
       if (attempt < MAX_ATTEMPTS) { delay(200); continue; }
+      noteFailure(0);
       return false;
     }
 
@@ -269,6 +327,7 @@ bool ADSB_Fetch(double lat, double lon, float radiusKm) {
     while (*head == ' ' || *head == '\r' || *head == '\n' || *head == '\t') head++;
     if (*head != '{') {
       Serial.printf("ADSB: odpoved nezacina JSON objektem, telo[0..120]: %.120s\n", s_body);
+      noteFailure(0);
       Status_Set(ST_ADSB, "neocekavana odpoved");
       return false;
     }
@@ -283,6 +342,7 @@ bool ADSB_Fetch(double lat, double lon, float radiusKm) {
       Serial.printf("ADSB: JSON %s (attempt %d) - keeping last %d\n",
                     err.c_str(), attempt, s_count);
       if (attempt < MAX_ATTEMPTS) { delay(200); continue; }
+      noteFailure(0);
       return false;
     }
 
@@ -301,6 +361,7 @@ bool ADSB_Fetch(double lat, double lon, float radiusKm) {
       const char* msg = doc["msg"] | "(zadne msg)";
       Serial.printf("ADSB: chybi pole letadel - msg: %s\n", msg);
       Serial.printf("ADSB: telo[0..200]: %.200s\n", s_body);
+      noteFailure(0);
       Status_Set(ST_ADSB, "neocekavana odpoved");
       return false;   // valid JSON but wrong shape; a retry would not help
     }
@@ -362,6 +423,12 @@ bool ADSB_Fetch(double lat, double lon, float radiusKm) {
           snprintf(s_tmp[n].squawk, sizeof(s_tmp[n].squawk), "%04d", sq.as<int>());
         }
       }
+      {
+        const char* cat = plane["category"] | "";
+        strncpy(s_tmp[n].cat, cat, sizeof(s_tmp[n].cat) - 1);
+        s_tmp[n].cat[sizeof(s_tmp[n].cat) - 1] = '\0';
+      }
+      s_tmp[n].icon = PlaneIcon_Classify(s_tmp[n].type, s_tmp[n].cat);
       copyHex(&s_tmp[n], plane);
       copyCallsign(&s_tmp[n], plane);
       n++;
@@ -370,9 +437,11 @@ bool ADSB_Fetch(double lat, double lon, float radiusKm) {
     // Commit the scratch snapshot to the live list in one go.
     for (int i = 0; i < n; i++) s_list[i] = s_tmp[i];
     s_count = n;
+    noteSuccess();
     Serial.printf("ADSB: %d aircraft (%ld bytes)\n", n, len);
     Status_Set(ST_ADSB, "OK, %d", n);
     return true;
   }
+  noteFailure(retryAfter);
   return false;
 }

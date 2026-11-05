@@ -21,6 +21,7 @@
 #include <Arduino_GFX_Library.h>
 #include "esp_heap_caps.h"
 #include "Display_ST7701.h"
+#include "AAFont.h"     // smooth text for every print() - 0.8.5
 
 class Canvas16 : public Arduino_GFX {
  public:
@@ -50,6 +51,33 @@ class Canvas16 : public Arduino_GFX {
   }
 
   uint16_t* getFramebuffer() { return _fb; }
+
+  // --- Text (0.8.5) ----------------------------------------------------------
+  // Every print()/printf() ends up in one of these two. With a smooth typeface
+  // selected, whole strings go to AAText_Print() instead of being drawn one
+  // built-in 5x7 glyph at a time - see AAFont.h. Sizes it has no face for
+  // (the clock's old size 8) and the pixel setting take the original path.
+  size_t write(const uint8_t* buf, size_t n) override {
+    if (n && AAText_Enabled() && textsize_x >= 1 && textsize_x <= 5 && textsize_x == textsize_y) {
+      size_t start = 0;
+      for (size_t i = 0; i <= n; i++) {
+        if (i == n || buf[i] == '\n') {
+          if (i > start)
+            cursor_x += AAText_Print(buf + start, i - start, cursor_x, cursor_y,
+                                     textsize_x, textcolor, textbgcolor);
+          if (i < n) { cursor_x = 0; cursor_y += 8 * textsize_y; }
+          start = i + 1;
+        }
+      }
+      return n;
+    }
+    return Print::write(buf, n);
+  }
+  size_t write(uint8_t c) override {
+    if (AAText_Enabled() && textsize_x >= 1 && textsize_x <= 5 && textsize_x == textsize_y)
+      return write(&c, 1);
+    return Arduino_GFX::write(c);
+  }
 
   // Single controlled flush. Signature must match Arduino_GFX::flush(bool)
   // exactly so a call through an Arduino_GFX* is dispatched here, not to the base.

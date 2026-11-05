@@ -38,6 +38,11 @@ struct Aircraft {
   // Transponder code as four octal digits. Kept as text, not a number: 7700 is
   // an octal code, and "0021" must not turn into 21.
   char  squawk[6] = "";
+  // ADS-B emitter category ("A3" airliner, "A7" helicopter, "B1" glider...).
+  // Only a fallback for the icon when the type code is unknown - see
+  // PlaneIcon.cpp. Empty when the transponder does not send it.
+  char  cat[3] = "";
+  uint8_t icon = 0;           // PlaneIconKind, worked out once per fetch
   bool  onGround = false;
   bool  hasTrack = false;     // false = track unknown (drawn differently)
 };
@@ -46,6 +51,15 @@ void   ADSB_SetPollFn(void (*fn)());
 
 // Fetch aircraft within radiusKm of the location. Returns true on success.
 bool   ADSB_Fetch(double lat, double lon, float radiusKm);
+
+// --- Overload protection (0.8.4) - see the note in Config.h ----------------
+// ms since the last successful fetch; ULONG_MAX-ish when there never was one.
+unsigned long ADSB_DataAgeMs();
+bool   ADSB_DataStale();              // older than ADSB_STALE_MS
+bool   ADSB_DataHidden();             // older than ADSB_HIDE_MS (or none yet)
+// > 0 while the gate is closed: ms until the next request is allowed.
+unsigned long ADSB_PauseLeftMs();
+int    ADSB_LastHttpCode();           // last HTTP status (0 = no answer at all)
 
 int    ADSB_Count();
 const Aircraft* ADSB_List();

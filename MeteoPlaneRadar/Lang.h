@@ -94,7 +94,10 @@
   X(S_WIND,          "vitr",               "vítr",               "wind") \
   X(S_HYDRO,         "voda",               "voda",               "hydro") \
   X(S_BIOMASS,       "biomasa",            "biomasa",            "biomass") \
-  X(S_OTHER,         "ostatni",            "ostatní",            "other")
+  X(S_OTHER,         "ostatni",            "ostatní",            "other") \
+  X(S_OLD_PLANES,    "stara data",         "stará data",         "old data") \
+  X(S_NO_PLANE_DATA, "bez dat o letadlech", "bez dat o letadlech", "no aircraft data") \
+  X(S_PAUSE,         "pauza",              "pauza",              "pause")
 
 enum StrId : uint16_t {
 #define X(id, cz, czw, en) id,

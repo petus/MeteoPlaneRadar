@@ -5,6 +5,7 @@
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
 //  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
 // =============================================================================
+#include "AAFont.h"   // CZT(): accents with the smooth fonts
 #include "ScreenPrice.h"
 #include "Energy.h"
 #include "Settings.h"
@@ -304,8 +305,8 @@ static void drawCentre() {
   // The unit, and - when the middle is NOT showing the current hour - which
   // hour it is showing. A big number with no hour next to it would be read as
   // the price right now, which on tomorrow's dial is simply wrong.
-  if (isNow || showSlot < 0) snprintf(buf, sizeof(buf), "Kc/kWh");
-  else snprintf(buf, sizeof(buf), "Kc/kWh  %02d:%02d",
+  if (isNow || showSlot < 0) snprintf(buf, sizeof(buf), "%s", CZT("Kc/kWh", "Kč/kWh"));
+  else snprintf(buf, sizeof(buf), "%s  %02d:%02d", CZT("Kc/kWh", "Kč/kWh"),
                 Price_SlotHour(showSlot), Price_SlotMinute(showSlot));
   Layout_ReserveTextCentered(buf, 1, CX, UNIT_Y);
   UI_TextCentered(buf, UNIT_Y, C_GRAY, 1);

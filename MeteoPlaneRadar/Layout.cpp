@@ -5,6 +5,7 @@
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
 // =============================================================================
 #include "Layout.h"
+#include "AAFont.h"
 #include "Config.h"
 #include <string.h>
 #include <math.h>
@@ -73,6 +74,9 @@ void Layout_ReserveBand(int y, int h) {
 
 int Layout_TextW(const char* s, uint8_t size) {
   if (!s) return 0;
+  // With a smooth typeface the real width - never more than the built-in
+  // font's, see AAFont.h - so centring and claims follow what is drawn.
+  if (AAText_Enabled()) return AAText_Width((const uint8_t*)s, strlen(s), size);
   return (int)strlen(s) * LY_CHAR_W(size);
 }
 

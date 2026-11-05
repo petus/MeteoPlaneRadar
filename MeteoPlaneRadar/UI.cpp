@@ -8,6 +8,7 @@
 //  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
 // =============================================================================
 #include "UI.h"
+#include "Layout.h"
 #include "Outside.h"
 #include "Display_ST7701.h"
 #include <math.h>
@@ -17,9 +18,9 @@
 
 void UI_TextCenteredIn(const char* text, int x, int w, int cy,
                        uint16_t color, uint8_t size) {
-  int16_t x1, y1; uint16_t tw, th;
+  // Measured the same way print() will draw it (smooth or built-in font).
+  const int tw = Layout_TextW(text, size);
   gfx->setTextSize(size);
-  gfx->getTextBounds(text, 0, 0, &x1, &y1, &tw, &th);
   gfx->setTextColor(color);
   gfx->setCursor(x + (w - (int)tw) / 2, cy);
   gfx->print(text);
@@ -82,9 +83,7 @@ void UI_DrawStatusLine(int cy) {
   // narrower end. The longest string this can produce is "23:59   -12 °C"
   // (~168 px at size 2) and the chord here is around 265 px, so it fits - but
   // check anyway: a wider font or a lower line would silently overflow.
-  int16_t x1, y1; uint16_t tw, th;
-  gfx->setTextSize(2);
-  gfx->getTextBounds(txt, 0, 0, &x1, &y1, &tw, &th);
+  const int tw = Layout_TextW(txt, 2);
   int room = 2 * UI_ChordHalfWidth(cy + 16) - 8;
   if ((int)tw > room) return;
 

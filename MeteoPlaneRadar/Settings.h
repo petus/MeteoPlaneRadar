@@ -24,10 +24,20 @@ void   Settings_Begin();
 // Stored here rather than left to WiFiManager: the access point has to stay up
 // until a network is actually entered, and the captive portal has to speak the
 // user's language - both of which need the firmware to own the credentials.
-const char* Settings_WifiSsid();
-const char* Settings_WifiPass();
-bool        Settings_HasWifi();
+//
+// 0.8.0: up to WIFI_SLOTS networks. Slot 0 is the one the old single-network
+// keys ("ssid"/"wpass") always held, so an updated device keeps its network.
+// The slots can be filled by hand in the web UI even when the network is not in
+// range - the point is to set up the office before taking the device there.
+const char* Settings_WifiSsid(uint8_t slot = 0);
+const char* Settings_WifiPass(uint8_t slot = 0);
+bool        Settings_HasWifi();                 // at least one slot filled
+// From the captive portal: remember this network. Updates the password if the
+// SSID is already known, otherwise puts it first and pushes the rest down.
 void        Settings_SetWifi(const char* ssid, const char* pass);
+// From the web UI: write one slot exactly. An empty ssid clears the slot; a
+// nullptr pass keeps the stored password (the page never sees it).
+void        Settings_SetWifiSlot(uint8_t slot, const char* ssid, const char* pass);
 void        Settings_ClearWifi();
 
 // --- Location ---------------------------------------------------------------
@@ -74,8 +84,42 @@ uint16_t Settings_AutoRotateSec();
 void     Settings_SetAutoRotateSec(uint16_t s);
 
 // --- Weather radar ----------------------------------------------------------
-uint8_t Settings_RadarSource();            // RADAR_SRC_CHMU / RADAR_SRC_RAINVIEWER
+uint8_t Settings_RadarSource();            // RADAR_SRC_CHMU / _RAINVIEWER / _CHMU_MASKED
 void    Settings_SetRadarSource(uint8_t s);
+bool    Settings_RadarIsChmu();            // either of the two CHMU variants
+
+// --- Storm watch (0.8.0) ----------------------------------------------------
+// With StormOnly on, the weather radar is left out of the automatic cycling
+// unless an echo of at least StormDbz lies within StormKm of the device.
+bool     Settings_StormOnly();
+void     Settings_SetStormOnly(bool on);
+uint8_t  Settings_StormDbz();
+void     Settings_SetStormDbz(uint8_t dbz);
+uint16_t Settings_StormKm();
+void     Settings_SetStormKm(uint16_t km);
+
+// --- Aircraft nearby (0.8.0) ------------------------------------------------
+// With PlaneAlert on, the aircraft screen is left out of the cycling and jumps
+// in for PlaneAlertSec seconds whenever an aircraft comes within PlaneAlertKm -
+// or flies through the window view, which takes priority even when further.
+bool     Settings_PlaneAlert();
+void     Settings_SetPlaneAlert(bool on);
+uint16_t Settings_PlaneAlertKm();
+void     Settings_SetPlaneAlertKm(uint16_t km);
+uint16_t Settings_PlaneAlertSec();
+void     Settings_SetPlaneAlertSec(uint16_t s);
+bool     Settings_WindowOn();
+void     Settings_SetWindowOn(bool on);
+uint16_t Settings_WindowAz();              // bearing of the centre, 0..359
+void     Settings_SetWindowAz(uint16_t deg);
+uint16_t Settings_WindowWidth();           // full width of the view, degrees
+void     Settings_SetWindowWidth(uint16_t deg);
+uint16_t Settings_WindowKm();
+void     Settings_SetWindowKm(uint16_t km);
+
+// --- Home Assistant (0.8.0) -------------------------------------------------
+bool     Settings_HaEnabled();
+void     Settings_SetHaEnabled(bool on);
 // The dBZ / mm/h scale down the left of the weather screen. On by default: it
 // is what makes the colours mean anything. Off for those who know the scale by
 // heart and would rather see the map underneath it.
@@ -113,6 +157,16 @@ uint16_t Settings_ClockColor();            // RGB565
 void     Settings_SetClockColor(uint16_t c);
 uint16_t Settings_SecondsColor();
 void     Settings_SetSecondsColor(uint16_t c);
+uint8_t  Settings_ClockFont();             // CLOCK_FONT_*
+void     Settings_SetClockFont(uint8_t f);
+
+// --- Altitude colours (0.8.0) -----------------------------------------------
+// Three boundaries in METRES, ascending, and four RGB565 colours: band 0 is
+// below the first boundary, band 3 above the last.
+uint16_t Settings_AltBandM(uint8_t i);     // i = 0..2
+void     Settings_SetAltBandsM(uint16_t b0, uint16_t b1, uint16_t b2);
+uint16_t Settings_AltColor(uint8_t band);  // band = 0..3
+void     Settings_SetAltColor(uint8_t band, uint16_t c);
 
 // --- Aircraft filters and alerts --------------------------------------------
 uint16_t Settings_AltMinFt();

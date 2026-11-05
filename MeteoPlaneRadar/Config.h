@@ -348,8 +348,26 @@
 // ---------------------------------------------------------------------------
 //  Weather radar source
 // ---------------------------------------------------------------------------
-#define RADAR_SRC_CHMU       0
-#define RADAR_SRC_RAINVIEWER 1
+//
+// 0.8.0: the masked CHMU composite was APPENDED as 2 rather than slotted in
+// next to plain CHMU, for the same reason the energy screens were appended:
+// the number is what is stored in NVS, and renumbering would silently switch an
+// existing device from RainViewer to something else on update.
+//
+//   CHMU         maxz/png/        - the plain MAX_Z composite. Every echo the
+//                                   radars see, at full colour.
+//   CHMU masked  maxz/png_masked/ - the same MAX_Z picture, but CHMU checks it
+//                                   against PseudoCAPPI 2 km: only where the
+//                                   rain actually reaches the ground (>= 7 dBZ
+//                                   at 2 km) is it drawn at full colour; the
+//                                   rest - rain evaporating on the way down,
+//                                   anvils of distant storms - comes out paler.
+//                                   Same file names, same geometry, so it goes
+//                                   through exactly the same code.
+#define RADAR_SRC_CHMU        0
+#define RADAR_SRC_RAINVIEWER  1
+#define RADAR_SRC_CHMU_MASKED 2
+#define RADAR_SRC_MAX         2
 
 // RainViewer: free, no key, non-commercial. The JSON lists the available
 // frames, the tiles come from the tile cache in standard Web Mercator z/x/y.
@@ -500,9 +518,15 @@
 #define MIX_AREA_LON_MIN   -25.0f
 #define MIX_AREA_LON_MAX    45.0f
 
-// How far back to ask for. The published data runs one to two hours behind real
-// time, so a window shorter than this can legitimately come back empty.
-#define MIX_WINDOW_H 4
+// How far back to ask for. The published data USUALLY runs one to two hours
+// behind real time - but not always: on 25.10.2026 the newest Czech sample was
+// eleven hours old, a 4-hour window came back as "404 no content available"
+// and the screen sat on "loading" all day. So the window is widened step by
+// step until something comes back. The narrow one goes first because it is a
+// couple of kilobytes; 36 hours of all twenty production types is still only
+// a few tens of kB.
+#define MIX_WINDOW_H      4
+#define MIX_WINDOWS_H     { MIX_WINDOW_H, 12, 36 }
 
 // The day-ahead price is fixed for the whole day, so this is really only about
 // picking up tomorrow's prices once they appear after ~14:00.
@@ -547,6 +571,17 @@
 #define SEC_STYLE_LINE  2
 #define SEC_STYLE_COMET 3
 
+// Clock typeface (0.8.0). The digits used to be the built-in 5x7 font blown up
+// eight times, which at 64 px is a staircase. The new ones are proper outlines
+// rendered with 16 levels of coverage (see AAFont.h / tools/make_fonts.py).
+// The pixel font stays as an option for anyone who liked it.
+#define CLOCK_FONT_PIXEL   0
+#define CLOCK_FONT_INTER   1     // Inter Display Medium - the default
+#define CLOCK_FONT_POPPINS 2     // Poppins Medium - rounder
+#define CLOCK_FONT_THIN    3     // Inter Display Light - thin
+#define CLOCK_FONT_MAX     3
+#define CLOCK_FONT_DEFAULT CLOCK_FONT_INTER
+
 // ---------------------------------------------------------------------------
 //  Night mode
 //
@@ -582,3 +617,111 @@
 //  before it turns into two labels sitting on top of each other.
 // ---------------------------------------------------------------------------
 #define LAYOUT_DEBUG 0
+
+// =============================================================================
+//  0.8.0 additions
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+//  Altitude colours on the aircraft radar
+//
+//  Three boundaries split the sky into four bands. Both the boundaries and the
+//  four colours are settings now; these are only the defaults, and they are
+//  exactly what the radar always drew, so nothing changes until someone goes
+//  looking for the option.
+// ---------------------------------------------------------------------------
+#define ALT_BAND1_M_DEFAULT  2000     // below: approach / departure, light aircraft
+#define ALT_BAND2_M_DEFAULT  6000
+#define ALT_BAND3_M_DEFAULT 10000     // above: long-haul cruise
+#define ALT_COL0_DEFAULT 0xF800       // red
+#define ALT_COL1_DEFAULT 0xFC00       // orange
+#define ALT_COL2_DEFAULT 0xFFE0       // yellow
+#define ALT_COL3_DEFAULT 0x001F       // blue
+
+// ---------------------------------------------------------------------------
+//  Storm watch - the weather radar joins the screen cycling only while there
+//  is something worth seeing.
+//
+//  Every STORM_PERIOD_MS the newest CHMU frame is checked: is there an echo of
+//  at least the configured dBZ within the configured distance? CHMU publishes a
+//  frame every five minutes, so checking more often only re-reads the same one.
+//
+//  CHMU, not RainViewer, whichever the screen uses: it is one small image with
+//  a known colour scale, where RainViewer would be a dozen tiles. Outside the
+//  CHMU coverage the watch has nothing to look at and says so on the status
+//  page instead of pretending the sky is clear.
+// ---------------------------------------------------------------------------
+#define STORM_DBZ_DEFAULT   20
+#define STORM_KM_DEFAULT    50
+#define STORM_PERIOD_MS     300000UL   // 5 min, the CHMU cadence
+#define STORM_RETRY_MS       90000UL   // sooner after a failed fetch
+// A single pixel is one square kilometre and can be a radar artefact. This many
+// over the threshold make it real.
+#define STORM_MIN_PIXELS    3
+// How many consecutive clear checks it takes to drop the radar out of the
+// cycling again. One clear frame between two stormy ones should not make the
+// screen flicker in and out.
+#define STORM_CLEAR_CHECKS  2
+
+// ---------------------------------------------------------------------------
+//  Aircraft nearby - the aircraft radar jumps in for a few seconds when
+//  something flies close (or past the window), then the cycling carries on.
+// ---------------------------------------------------------------------------
+#define PLANE_ALERT_KM_DEFAULT   5
+#define PLANE_ALERT_SEC_DEFAULT  15
+// How often to ask adsb.fi while the aircraft screen is NOT showing. The area
+// asked for is small (the alert radius or the window distance), so the answer
+// is a few hundred bytes. An airliner at cruise covers 5 km in about twenty
+// seconds, so polling slower than this would miss most of them.
+#define PLANE_WATCH_PERIOD_MS    8000UL
+// One aircraft is announced once. It is remembered for this long, so a plane
+// circling overhead does not interrupt the cycling every eight seconds.
+#define PLANE_ALERT_FORGET_MS    900000UL   // 15 min
+#define PLANE_ALERT_MEMORY       12
+
+// The window. Bearing of its centre, how wide the view is, and how far you can
+// realistically make out an aircraft through it.
+#define WINDOW_AZ_DEFAULT        180
+#define WINDOW_WIDTH_DEFAULT      90
+#define WINDOW_KM_DEFAULT         15
+
+// ---------------------------------------------------------------------------
+//  WiFi - up to three remembered networks
+// ---------------------------------------------------------------------------
+#define WIFI_SLOTS 3
+// While the link is down, the device first retries the network it was on (a
+// router reboot is the usual reason) and only after this long looks around for
+// any of the other remembered ones.
+#define WIFI_SWITCH_AFTER_MS 60000UL
+#define WIFI_TRY_MS          12000UL    // per network at boot
+
+// ---------------------------------------------------------------------------
+//  Home Assistant
+//
+//  GET http://meteoplaneradar.local/api/ha returns one flat JSON object with
+//  everything the device knows - weather, nearest aircraft, storm, price - for
+//  Home Assistant's RESTful integration to poll. Off by default; switched on in
+//  the web UI. NOT TESTED against a real Home Assistant - see the README.
+// ---------------------------------------------------------------------------
+#define HA_DEFAULT_ON false
+
+// ---------------------------------------------------------------------------
+//  adsb.fi overloaded or down (0.8.4)
+//
+//  A failed poll used to be retried at once and then again every 10-30 s,
+//  which against an overloaded server is exactly the wrong thing. Now every
+//  consecutive failure doubles a shared pause (all callers - the radar, the
+//  nearby watch, Home Assistant - go through the same gate), up to
+//  ADSB_BACKOFF_MAX_MS. 429 and 5xx are not retried within the same poll, and a
+//  Retry-After from the server is honoured. The first good answer resets it.
+//
+//  Old aircraft are not passed off as live: after ADSB_STALE_MS without fresh
+//  data they turn grey and the line under the clock says how old they are;
+//  after ADSB_HIDE_MS they are not drawn at all. A stale detail panel no
+//  longer holds the screen cycling, and no alert is raised from stale data.
+// ---------------------------------------------------------------------------
+#define ADSB_BACKOFF_BASE_MS   10000UL     // pause after the first failure
+#define ADSB_BACKOFF_MAX_MS   300000UL     // 5 min at most
+#define ADSB_RETRY_AFTER_MAX_S   900       // trust Retry-After up to 15 min
+#define ADSB_STALE_MS          60000UL     // grey after one minute
+#define ADSB_HIDE_MS          600000UL     // gone after ten

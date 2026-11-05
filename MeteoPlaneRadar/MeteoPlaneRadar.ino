@@ -66,6 +66,7 @@
 //  Licence: MIT (see LICENSE.txt). Version: Version.h. History: CHANGELOG.md.
 // =============================================================================
 
+#include "AAFont.h"   // CZT(): accents with the smooth fonts
 #include <Arduino_GFX_Library.h>
 #include <Wire.h>
 #include <time.h>
@@ -105,6 +106,9 @@
 #include "Watchdog.h"
 #include "Outside.h"
 #include "Route.h"
+#include "StormWatch.h"
+#include "PlaneWatch.h"
+#include "ADSB.h"
 
 // gfx = single off-screen canvas in PSRAM. Everything is drawn here, then
 // flush() pushes the whole frame to the panel in one shot -> no flicker.
@@ -226,12 +230,12 @@ static void checkBootReset() {
   pinMode(BOOT_PIN, INPUT_PULLUP);
   if (digitalRead(BOOT_PIN) != LOW) return;
   gfx->fillScreen(C_BLACK);
-  UI_TextCentered("Drzte pro reset...", LCD_HEIGHT / 2, C_WHITE, 2);
+  UI_TextCentered(CZT("Drzte pro reset...", "Držte pro reset..."), LCD_HEIGHT / 2, C_WHITE, 2);
   gfx->flush();
   unsigned long start = millis();
   while (digitalRead(BOOT_PIN) == LOW) {
     if (millis() - start >= 3000) {
-      UI_TextCentered("Mazu nastaveni", LCD_HEIGHT / 2 + 30, C_RED, 2);
+      UI_TextCentered(CZT("Mazu nastaveni", "Mažu nastavení"), LCD_HEIGHT / 2 + 30, C_RED, 2);
       gfx->flush();
       Settings_ClearAll();
       delay(800);
@@ -252,7 +256,40 @@ static void checkBootReset() {
 // =============================================================================
 static int s_screen = SCREEN_PLANES_I;
 
-static bool screenVisible(int i) { return Settings_ScreenEnabled((uint8_t)i); }
+// --- Aircraft-nearby alert state (0.8.0) ---
+// While it runs, the aircraft screen is on display for a few seconds with the
+// triggering aircraft's detail open; then the screen it interrupted comes back.
+static bool          s_alertOn = false;
+static unsigned long s_alertUntil = 0;
+static int           s_alertReturn = -1;
+
+// What is actually on the display, for the web status page and Home Assistant.
+// Settings_Screen() only follows the user's own choices (it is what is restored
+// at boot), not the automatic cycling or an alert.
+int  MPR_CurrentScreen() { return s_screen; }
+bool MPR_AlertActive()   { return s_alertOn; }
+
+// Reachable at all: has a dot, a long press stops on it. 0.8.0 adds two ways
+// for a screen that is switched off to turn up anyway - the weather radar
+// while a storm is near (when the user asked for that), and the aircraft
+// screen for the length of an alert.
+static bool screenVisible(int i) {
+  if (Settings_ScreenEnabled((uint8_t)i)) return true;
+  if (i == SCREEN_METEO_I && Settings_StormOnly() && StormWatch_Active()) return true;
+  if (i == SCREEN_PLANES_I && s_alertOn) return true;
+  return false;
+}
+
+// Part of the AUTOMATIC cycling. Narrower than visible: with "radar only when
+// a storm is coming" the weather screen is skipped while the sky is clear even
+// though a long press still reaches it, and with the aircraft alert on, the
+// aircraft screen only ever appears through the alert.
+static bool inRotation(int i) {
+  if (i == SCREEN_SETTINGS_I) return false;
+  if (i == SCREEN_METEO_I && Settings_StormOnly()) return StormWatch_Active();
+  if (i == SCREEN_PLANES_I && Settings_PlaneAlert()) return false;
+  return Settings_ScreenEnabled((uint8_t)i);
+}
 
 // The visible screens in order, used for the dots and for stepping.
 static int visibleList(int* out) {
@@ -372,6 +409,15 @@ static bool activeModalOpen() {
   return (s_screen == SCREEN_PLANES_I) && ScreenPlanes_DetailOpen();
 }
 
+// The user touched the glass (or the browser) during an aircraft alert: they
+// are driving now. The alert stops counting down and nothing is switched back
+// behind their back.
+static void alertTakenOver() {
+  if (!s_alertOn) return;
+  s_alertOn = false;
+  ScreenPlanes_AlertEnd();
+}
+
 // Act on a gesture captured earlier (possibly during a download). Called only
 // from loop(), where nothing else is drawing.
 static void dispatchTouch() {
@@ -379,6 +425,13 @@ static void dispatchTouch() {
   const PendKind kind = s_pendKind;
   const int a = s_pendA, b = s_pendB;
   s_pendKind = PEND_NONE;
+
+  if (s_alertOn) {
+    alertTakenOver();
+    // A tap during an alert only closes the panel the alert opened - it must
+    // not go on to select whatever aircraft happened to be under the finger.
+    if (kind == PEND_TAP) { drawActive(); return; }
+  }
 
   switch (kind) {
     case PEND_SWIPE:
@@ -416,25 +469,86 @@ static void autoRotateTick() {
 
   unsigned long now = millis();
 
+  // The alert runs its own clock and hands back to the cycling when done.
+  if (s_alertOn) { s_lastRotate = now; return; }
+
   // An open aircraft detail holds the cycling: the user is reading it. The
   // timer is kept fresh rather than stopped, so when the panel closes - by a
   // tap, or because the aircraft dropped out of the data - cycling resumes with
   // a full interval instead of switching away immediately.
-  if (activeModalOpen()) { s_lastRotate = now; return; }
+  //
+  // 0.8.4: unless the data behind the panel has gone stale. Then nobody is
+  // reading anything live, and the cycling carries on - the panel is closed
+  // so the screen does not come back to frozen numbers next time round.
+  if (activeModalOpen()) {
+    if (!ADSB_DataStale()) { s_lastRotate = now; return; }
+    if (now - s_lastRotate >= (unsigned long)secs * 1000UL) ScreenPlanes_CloseDetail();
+  }
 
   if (now < s_touchPauseUntil) return;
   if (now - s_lastRotate < (unsigned long)secs * 1000UL) return;
   s_lastRotate = now;
 
-  // Step to the next visible DATA screen, skipping settings.
+  // Step to the next screen that takes part in the cycling.
   int next = s_screen;
+  bool found = false;
   for (int guard = 0; guard < SCREEN_N; guard++) {
     next = (next + 1) % SCREEN_N;
-    if (next != SCREEN_SETTINGS_I && screenVisible(next)) break;
+    if (inRotation(next)) { found = true; break; }
   }
-  if (next == s_screen || next == SCREEN_SETTINGS_I) return;
+  if (!found || next == s_screen) return;
   s_screen = next;
   enterActive();
+}
+
+// --- Aircraft-nearby alert (0.8.0) ---------------------------------------------
+static void endAlert() {
+  ScreenPlanes_AlertEnd();
+  s_alertOn = false;
+  if (s_screen == SCREEN_PLANES_I) {
+    int r = s_alertReturn;
+    if (r < 0 || r >= SCREEN_N || !screenVisible(r) || r == SCREEN_PLANES_I) {
+      // The screen we came from is gone (switched off meanwhile) - take the
+      // first one that is still there.
+      r = SCREEN_SETTINGS_I;
+      for (int i = 0; i < SCREEN_N; i++) if (screenVisible(i)) { r = i; break; }
+    }
+    s_screen = r;
+    enterActive();
+  }
+  // A full interval on the screen we returned to, not whatever was left of it.
+  s_lastRotate = millis();
+}
+
+static void planeAlertTick() {
+  if (!Settings_PlaneAlert()) {
+    if (s_alertOn) endAlert();
+    return;
+  }
+  const unsigned long now = millis();
+  if (s_alertOn) {
+    if ((long)(now - s_alertUntil) >= 0) endAlert();
+    return;
+  }
+  // Never interrupt the settings screen, the aircraft screen itself, an open
+  // detail, or someone who has just been swiping around.
+  if (s_screen == SCREEN_PLANES_I || s_screen == SCREEN_SETTINGS_I) return;
+  if (activeModalOpen()) return;
+  if (now < s_touchPauseUntil) return;
+
+  char hex[8];
+  float km = 0;
+  bool win = false;
+  if (!PlaneWatch_Take(hex, sizeof(hex), &km, &win)) return;
+
+  Serial.printf("Letadlo %s: %s, %.1f km\n", hex, win ? "v okne" : "nablizku", km);
+  s_alertReturn = s_screen;
+  s_alertOn = true;
+  s_alertUntil = now + (unsigned long)Settings_PlaneAlertSec() * 1000UL;
+  s_screen = SCREEN_PLANES_I;
+  ScreenPlanes_Enter();
+  ScreenPlanes_AlertBegin(hex, km, win);
+  drawActive();
 }
 
 static const char* resetReasonText() {
@@ -461,6 +575,7 @@ void setup() {
   Serial.printf("Volna pamet: %u B\n", (unsigned)ESP.getFreeHeap());
 
   Settings_Begin();          // also sets the interface language
+  CHMU_SetMasked(Settings_RadarSource() == RADAR_SRC_CHMU_MASKED);
   TimeZone_Begin();      // compiled-in default; the forecast may correct it
   Layout_SelfTest();         // no-op unless LAYOUT_DEBUG is on
 
@@ -648,18 +763,21 @@ void loop() {
   {
     const int scr = WebConfig_TakeScreen();
     if (scr >= 0) {
+      alertTakenOver();
       if (activeModalOpen()) ScreenPlanes_CloseDetail();
       gotoScreen(scr);
       s_touchPauseUntil = millis() + autoRotatePauseMs();
     }
     const int step = WebConfig_TakeScreenStep();
     if (step) {
+      alertTakenOver();
       if (activeModalOpen()) ScreenPlanes_CloseDetail();
       switchScreen(step);
       s_touchPauseUntil = millis() + autoRotatePauseMs();
     }
     const int rng = WebConfig_TakeRangeStep();
     if (rng) {
+      alertTakenOver();
       activeChangeRange(rng);
       drawActive();
       s_touchPauseUntil = millis() + autoRotatePauseMs();
@@ -695,6 +813,7 @@ void loop() {
   }
 
   autoRotateTick();
+  planeAlertTick();
 
   // Cheap insurance for the display: one I2C read every few seconds that checks
   // the expander still holds LCD power and reset where we left them.
@@ -708,6 +827,8 @@ void loop() {
   Outside_Tick();     // outside temperature and the clock safety net
   Forecast_Tick();    // forecast, sun times and air quality
   Energy_Tick();      // spot price and generation mix (only if those screens are on)
+  StormWatch_Tick();  // newest radar frame near us (only when something wants it)
+  PlaneWatch_Tick(s_screen == SCREEN_PLANES_I);   // small poll for the alert / HA
   NightMode_Tick();   // day/night brightness
   Route_Tick();       // pending "where is it flying from/to" lookup
   Settings_Tick();    // debounced persist of UI state to NVS

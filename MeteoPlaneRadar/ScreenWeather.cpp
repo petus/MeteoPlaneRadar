@@ -17,6 +17,7 @@
 //  Board:   Waveshare ESP32-S3-Touch-LCD-2.1 (round 480x480 display, ST7701)
 // =============================================================================
 #include "ScreenWeather.h"
+#include "AAFont.h"
 #include "CHMU.h"
 #include "Settings.h"
 #include "Config.h"
@@ -312,7 +313,8 @@ static void loadAndBuild() {
   if (ok) s_status = T(S_OK);
   else if (s_wide) s_status = T(S_FRAME_WIDE);
   else s_status = (s_frameCount > 0) ? T(S_OK) : T(S_ERROR);
-  Status_Set(ST_RADAR, ok ? "CHMU: %d snimku" : "CHMU: chyba", s_frameCount);
+  if (CHMU_Masked()) Status_Set(ST_RADAR, ok ? "CHMU masked: %d snimku" : "CHMU masked: chyba", s_frameCount);
+  else               Status_Set(ST_RADAR, ok ? "CHMU: %d snimku" : "CHMU: chyba", s_frameCount);
 }
 
 // -----------------------------------------------------------------------------
@@ -348,8 +350,13 @@ static void drawOverlay() {
   // uses, so both read alike.
   if (Settings_MeteoLegend()) {
     static const uint16_t COL_CHMU[6] = { 0xA000, 0xF800, 0xFC20, 0xE6E0, 0x05E0, 0x001F };
-    static const char*    LBL_CHMU[6] = { ">56 / >100", "52 / 65", "46 / 27",
-                                          "40 / 12", "32 / 3.6", "20 / <1" };
+    // Read off the CHMU scale (scl-dbzmmh.png) and checked against real
+    // frames: these six colours ARE 56, 52, 44, 36, 24 and 12 dBZ. Up to 0.8.4
+    // the labels said 46 / 40 / 32 / 20 for the lower four, which put light rain
+    // (blue, 12 dBZ) at the 20 dBZ the storm watch triggers on. mm/h by the
+    // same Marshall-Palmer conversion as before.
+    static const char*    LBL_CHMU[6] = { ">56 / >100", "52 / 65", "44 / 21",
+                                          "36 / 6.5", "24 / 1.2", "12 / 0.2" };
     // #ffaaff  #c10000  #ff4400  #ffaa00  #005588  #00a3e0
     static const uint16_t COL_RV[6]   = { 0xFD5F, 0xC000, 0xFA20, 0xFD40, 0x02B1, 0x051C };
     static const char*    LBL_RV[6]   = { ">55 / >100", "50 / 49", "45 / 24",
@@ -363,7 +370,9 @@ static void drawOverlay() {
     gfx->fillRect(lx - 2, ly - 2, boxW, boxH, C_BLACK);   // readability backing
     gfx->setTextSize(1);
     gfx->setTextColor(rv ? C_CYAN : C_GREEN);
-    gfx->setCursor(lx, ly); gfx->print(rv ? "RainViewer" : "CHMU");
+    // The masked composite uses the same scale; only the paler "does not reach
+    // the ground" variants are extra, and those are explained in the web UI.
+    gfx->setCursor(lx, ly); gfx->print(rv ? "RainViewer" : (CHMU_Masked() ? CZT("CHMU masked", "ČHMÚ masked") : CZT("CHMU", "ČHMÚ")));
     gfx->setTextColor(C_GRAY);
     gfx->setCursor(lx, ly + 10); gfx->print("dBZ / mm/h");
     for (int i = 0; i < 6; i++) {

@@ -80,6 +80,14 @@ bool Net_GetString(const char* url, String& out, const char* tag) {
   int code = http.GET();
   if (code != HTTP_CODE_OK) {
     Serial.printf("%s: HTTP %d\n", tag, code);
+    // Say what was asked and what the server said about it. A bare "HTTP 404"
+    // cannot tell a wrong parameter from a source that simply has no data yet.
+    if (code > 0) {
+      Serial.printf("%s: URL %s\n", tag, url);
+      String err = http.getString();
+      if (err.length() > 240) err = err.substring(0, 240);
+      Serial.printf("%s: odpoved: %s\n", tag, err.c_str());
+    }
     http.end();
     return false;
   }
