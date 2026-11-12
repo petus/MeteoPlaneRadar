@@ -1,7 +1,20 @@
 {
  "v": 1,
- "serial": 1,
+ "serial": 4,
  "cards": [
+  {
+   "id": "den",
+   "file": "den.json",
+   "size": 749,
+   "sha256": "0973f3d21f643344ef67128caf02303528f99696d0fd49d9f0d877c84d97283f",
+   "title": "Den",
+   "host": "",
+   "desc": {
+    "cs": "Kolik dne už uběhlo, prstenec a čas. Karta se skriptem, bez internetu.",
+    "en": "How much of the day has passed, as a ring and the time. A script card; needs no internet."
+   },
+   "script": true
+  },
   {
    "id": "kurzy-cnb",
    "file": "kurzy-cnb.json",
@@ -15,6 +28,19 @@
    }
   },
   {
+   "id": "kurzy-listek",
+   "file": "kurzy-listek.json",
+   "size": 1280,
+   "sha256": "afaec86aed591731ca5fbf60f1815514b9101c0744923d22b9991664fedce2b7",
+   "title": "Kurzovní lístek",
+   "host": "api.cnb.cz",
+   "desc": {
+    "cs": "Kurzovní lístek ČNB: šest měn pod sebou. Karta se skriptem.",
+    "en": "The Czech National Bank's list: six currencies in a table. A script card."
+   },
+   "script": true
+  },
+  {
    "id": "svatek",
    "file": "svatek.json",
    "size": 221,
@@ -25,6 +51,19 @@
     "cs": "Kdo má dnes svátek podle českého kalendáře.",
     "en": "Whose name day it is today in the Czech calendar."
    }
+  },
+  {
+   "id": "web-chiptron",
+   "file": "web-chiptron.json",
+   "size": 2824,
+   "sha256": "a0ef248b5846ab2b89ab477a0f7ed2f52221338973802658c1134db6b621e571",
+   "title": "chiptron.cz",
+   "host": "chiptron.cz",
+   "desc": {
+    "cs": "Žije web chiptron.cz? Kontrola každých 5 minut; zelená fajfka, nebo po třech nezdarech červený křížek. Karta se skriptem.",
+    "en": "Is chiptron.cz up? Checked every 5 minutes; a green tick, or a red cross after three failures in a row. A script card."
+   },
+   "script": true
   }
  ]
 }

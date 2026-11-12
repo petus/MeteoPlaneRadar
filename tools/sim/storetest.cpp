@@ -65,6 +65,7 @@ static void serve(const char* index, const char* sig) {
   if (sig) s_web[IDX + ".sig"] = slurp(fx + "/" + sig);
   s_web[BASE + "kurzy-cnb.json"] = slurp(fx + "/kurzy-cnb.json");
   s_web[BASE + "svatek.json"] = slurp(fx + "/svatek.json");
+  s_web[BASE + "den.json"] = slurp(fx + "/den.json");
   s_ms += STORE_CACHE_MS + 1000;          // never answer from the cached index
 }
 static bool list(JsonDocument& d, std::string* why = nullptr) {
@@ -92,10 +93,13 @@ int main(int argc, char** argv) {
   CHECK(list(d, &why));
   printf("genuine index: %s, serial %ld, %zu card(s)\n", why.empty() ? "accepted" : why.c_str(),
          (long)(d["serial"] | 0L), d["cards"].size());
-  CHECK(d["cards"].size() == 2);
-  CHECK(std::string(d["cards"][0]["id"] | "") == "kurzy-cnb");
-  CHECK((d["cards"][0]["installed"] | true) == false);
-  CHECK(std::string(d["cards"][0]["desc"]["en"] | "").size() > 10);
+  // the offer is sorted by id: den, kurzy-cnb, kurzy-listek, svatek
+  CHECK(d["cards"].size() == 4);
+  CHECK(std::string(d["cards"][1]["id"] | "") == "kurzy-cnb");
+  CHECK((d["cards"][1]["installed"] | true) == false);
+  CHECK(std::string(d["cards"][1]["desc"]["en"] | "").size() > 10);
+  CHECK((d["cards"][1]["script"] | true) == false);
+  CHECK((d["cards"][0]["script"] | false) == true);        // "den" carries a program and says so
 
   // 2. Installing from it. The second call rides on the cached index: one request, the card.
   const int before = s_requests;
@@ -104,9 +108,14 @@ int main(int argc, char** argv) {
   CHECK(Cards_Count() == 1);
   CHECK(std::string(Cards_Get(0)->id) == "kurzy-cnb");
   CHECK(list(d));
-  CHECK((d["cards"][0]["installed"] | false) == true);
-  CHECK((d["cards"][1]["installed"] | true) == false);
+  CHECK((d["cards"][1]["installed"] | false) == true);
+  CHECK((d["cards"][3]["installed"] | true) == false);
   printf("install kurzy-cnb: ok, %d card(s) on the device\n", Cards_Count());
+
+  // A script card installs the same way; the card table knows it carries a program.
+  CHECK(install("den", &why));
+  CHECK(Cards_Mutable("den") && Cards_Mutable("den")->hasScript);
+  CHECK(Cards_Remove("den"));
 
   // 3. What is not in the index cannot be installed, whatever the id looks like.
   CHECK(!install("nothing-here", &why));
@@ -156,8 +165,8 @@ int main(int argc, char** argv) {
     serve("index-evil.json", "index-evil.json.sig");
     s_web[BASE + "../../../secret.json"] = "{}";
     CHECK(list(d, &why));
-    printf("signed index with a bad entry: %zu of 2 entries offered\n", d["cards"].size());
-    CHECK(d["cards"].size() == 1);                      // the bad entry is not offered
+    printf("signed index with a bad entry: %zu of 4 entries offered\n", d["cards"].size());
+    CHECK(d["cards"].size() == 3);                      // the bad entry is not offered
     CHECK(!install("svatek", &why));                    // ...and cannot be installed
     CHECK(why == "no such card in the store");
   } else {

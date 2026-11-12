@@ -33,6 +33,16 @@ pohromadě v `MeteoPlaneRadar/Config.h`.
   Seznam vyrábí a podepisuje `tools/make_index.py`. Popis:
   [cards/README.md](cards/README.md#obchod-s-kartami).
 
+- **Karty se skriptem.** Karta s položkou `script` si displej kreslí sama
+  malým programem v jazyce Berry: zařízení dál stahuje adresu z karty a skript
+  z odpovědi nakreslí, co chce — tabulku, prstenec, vlastní rozvržení. Skript
+  má k dispozici jen kreslení (`g`), data své karty (`net`) a parametry a čas
+  (`cfg`); k souborům, nastavení ani k síti nemůže. Skripty jsou ve výchozím
+  stavu vypnuté. Jedno vykreslení smí trvat 500 ms a zabrat 96 kB; po třech
+  selháních se skript karty vypne, a pokud se zařízení restartuje uprostřed
+  skriptu, vypne se při dalším startu (bezpečný režim). Ukázky: kurzovní
+  lístek a „Den“. Popis: [cards/README.md](cards/README.md#karty-se-skriptem).
+
 ### Změněno
 
 - Karty se ukládají do LittleFS v oddílu `spiffs`, který v `partitions.csv`
@@ -44,14 +54,31 @@ pohromadě v `MeteoPlaneRadar/Config.h`.
   `/api/status` nový řádek `cards`, `/api/ha` může v `screen` vrátit `cards`.
   Nové jsou `/api/cards` (GET, POST) a `/api/cards/delete` (POST).
 - Obchod přidává `/api/store` (GET) a `/api/store/install` (POST, s heslem
-  správce, je-li nastavené). Firmware je s ním o 11 kB větší; ověřování dělá
+  správce, je-li nastavené). Firmware je s ním asi o 12 kB větší; ověřování dělá
   mbedTLS, které je v jádře ESP32 kvůli TLS, žádná knihovna nepřibyla.
+- Karty se skriptem přidávají `/api/scripts` (POST) a do `/api/cards` pole
+  `scripts`, `script`, `off` a `why`. Interpret Berry (licence MIT) je
+  přibalený ve složce `MeteoPlaneRadar/src/berry`, není to knihovna
+  k instalaci. Firmware je s ním o dalších asi 100 kB větší. Soubor karty
+  smí mít nově 8192 bajtů místo 2048.
 - **Tečky obrazovek nahoře jdou vypnout a ve výchozím stavu jsou skryté.**
   Každá karta je samostatná obrazovka a má svou tečku, takže s několika
   kartami byla řada dlouhá a málo říkala. Zapíná se na webu na záložce
   Obrazovky volbou „Zobrazovat tečky obrazovek nahoře“ a změna se projeví
   hned, bez restartu. V `/api/config` a v exportu nastavení je to klíč
   `screenDots`.
+- **Nová ukázková karta se skriptem: hlídání webu chiptron.cz.** Každých
+  5 minut stáhne malou odpověď webu; zelená fajfka, když odpovídá, oranžová
+  po prvním nezdaru, červený křížek po třech nezdarech za sebou. Je v obchodě
+  (seznam má číslo 4). Popis: [cards/README.md](cards/README.md#ukázka-hlídání-webu).
+
+### Vyzkoušeno
+
+- Karty, obchod, karty se skriptem a střídání karet běžely 12. 11. 2026 na
+  desce Waveshare ESP32-S3-Touch-LCD-2.1 po aktualizaci z 0.8.5
+  (aktualizace přes web tam i zpět, obchod s ověřením podpisu, všechny
+  ukázkové karty). Nevyzkoušené: deska 2.8C, dlouhý provoz, osm karet,
+  heslo správce.
 
 ---
 

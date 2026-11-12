@@ -31,3 +31,6 @@ bool ScreenCards_Step(int dir);
 void ScreenCards_Select(int which);
 // "2/3" for the web UI; empty with fewer than two cards.
 void ScreenCards_RangeText(char* out, size_t cap);
+// One line of text centred on the round panel at height y (top of the text),
+// shrunk from the wanted size until it fits there. Card scripts use it too.
+void ScreenCards_Label(const char* utf8, int y, uint16_t color, uint8_t size);

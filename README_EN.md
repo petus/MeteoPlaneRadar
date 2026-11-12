@@ -63,7 +63,7 @@ It is not a phone and does not try to be one.
 | **Forecast** | now, two 3-hour windows, today and six more days, air quality and pollen | Open-Meteo |
 | **Electricity price** | spot price on a quarter-hour dial, today and tomorrow | OTE via spotovaelektrina.cz |
 | **Generation** | what the grid is running on, renewable share, load, export | Energy-Charts (Fraunhofer ISE) |
-| **Cards** | your own values from any JSON API, e.g. CNB exchange rates | set by the card, see [cards](cards/README.md) |
+| **Cards** | your own screens: values from any JSON API (e.g. CNB exchange rates) or a card with its own program | set by the card, see [cards](cards/README.md) |
 | **Settings** | brightness, map orientation, units, language | — |
 
 Any of the first seven can be switched off in the browser; Settings is always
@@ -360,15 +360,129 @@ frame per 5 minutes) and a small aircraft poll (every 30 s) run too.
 
 ## Cards
 
-The **Cards** screen shows values you add yourself. A card is a small JSON
-file that says where to fetch a value and what to call it; it contains no
-code. Cards are uploaded in the browser (Screens tab) and stored in flash, so
-they survive a restart and a firmware update. A sample card with the Czech
-National Bank exchange rates and the format description (in Czech) are in
-[cards](cards/README.md).
+Cards are screens you add yourself. Every card is a screen of its
+own: it takes its turn with the others at the same interval, so four built-in
+screens and two cards make six screens. There can be up to 8 cards. The row
+of dots at the top, which has one dot per screen and per card, is therefore
+hidden by default; it can be switched on in the device's web UI. They come
+in three parts:
 
-The screen is off after an update, and while it is off the device fetches
-nothing for it.
+| | |
+| --- | --- |
+| **[JSON cards](#json-cards)** | a card without a program: a small file says where to fetch an answer and which values to show; the firmware does the layout |
+| **[Script cards](#script-cards-a-program-in-a-card)** | a card with **its own program** in Berry that draws the whole display itself |
+| **[Card store](#card-store)** | the device installs cards from this repository by itself and checks their signature first |
+
+<p align="center">
+  <img src="cards/nahled-kurzy-cnb.png" width="300" alt="Preview of the CNB exchange rates card on the round display">
+  <img src="cards/nahled-svatek.png" width="300" alt="Preview of the name-day card on the round display">
+</p>
+<p align="center">
+  <img src="cards/nahled-kurzy-listek.png" width="300" alt="Preview of the exchange-rate table script card">
+  <img src="cards/nahled-den.png" width="300" alt="Preview of the Day script card">
+  <img src="cards/nahled-web-chiptron.png" width="300" alt="Preview of the chiptron.cz uptime script card">
+</p>
+<p align="center"><sub>Previews of the sample cards: two JSON cards above, three script cards below. The screens were rendered by the firmware's own code running on a PC with real answers from the sources (rates of 11 November 2026, name day of 12 November 2026); they are not photos of the device.</sub></p>
+
+### JSON cards
+
+A JSON card shows values you add yourself: exchange rates, a temperature from
+your home automation, anything with a JSON API that can be read without
+logging in. It is a small file that says where to fetch the answer, which
+values to pick out of it and what to call them. This kind of card is data,
+not code: the firmware does the layout on the round display.
+
+The sample card with the Czech National Bank exchange rates
+([cards/kurzy-cnb.json](cards/kurzy-cnb.json)):
+
+```json
+{
+  "v": 1,
+  "id": "kurzy-cnb",
+  "title": "Kurzy ČNB",
+  "url": "https://api.cnb.cz/cnbapi/exrates/daily?lang=EN",
+  "refresh_min": 60,
+  "rows": [
+    { "label": "1 EUR", "path": "rates[currencyCode=EUR].rate", "decimals": 3, "unit": "Kč" },
+    { "label": "1 USD", "path": "rates[currencyCode=USD].rate", "decimals": 3, "unit": "Kč" }
+  ],
+  "note": { "label": "ČNB", "path": "rates[0].validFor" }
+}
+```
+
+The second sample, [cards/svatek.json](cards/svatek.json), shows a text value:
+whose name day it is today in the Czech calendar, from nameday.abalin.net.
+
+| | |
+| --- | --- |
+| **Values** | 1 to 4 values per card and an optional small line at the bottom |
+| **Path to a value** | `data.amount`, `list[0].price` or `rates[currencyCode=EUR].rate` — an array element picked by its content, not its position |
+| **Value format** | label, unit, number of decimals, multiplier; a decimal comma when the device is in Czech |
+
+### Script cards: a program in a card
+
+A JSON card can only show a few values in a fixed layout. A card that also
+has a `script` member carries a **program** in
+[Berry](https://berry-lang.github.io) and draws the whole display itself:
+tables, rings, its own layout. The device still fetches the address given in
+the card; the program decides what to draw from the answer.
+
+The program of the sample card Den, "Day"
+([cards/src/den.be](cards/src/den.be), shortened): a ring showing how much of
+the day has passed.
+
+```berry
+def draw()
+  var s = cfg.hms()   # seconds since midnight
+  g.ring(240, 240, 150, 168, 0, 360, g.DKGRAY)
+  if s == nil
+    g.label('waiting for the clock', 232, 2, g.YELLOW)
+    return
+  end
+  g.ring(240, 240, 150, 168, 0, s * 360 / 86400, g.CYAN)
+  g.label(format('%02d:%02d', s / 3600, (s % 3600) / 60), 190, 5, g.WHITE)
+end
+```
+
+| | |
+| --- | --- |
+| **Samples** | [kurzy-listek.json](cards/kurzy-listek.json) — the CNB exchange-rate table, six currencies with aligned numbers; [den.json](cards/den.json) — how much of the day has passed, needs no internet; [web-chiptron.json](cards/web-chiptron.json) — is chiptron.cz up? A green tick, or a red cross after three failed checks in a row; it fetches a small JSON answer from the site's WordPress every 5 minutes (not an ICMP ping). The programs are in [cards/src](cards/src) |
+| **Switching on** | scripts are **off** by default. They are allowed in the device's web UI, Screens tab, **Allow scripts in cards**. While they are off, a script card shows only its title and a message that the script is not running |
+| **What a program may do** | draw (`g`), read the answer from its own card's address (`net`), read the card's parameters and the time (`cfg`). It cannot reach files, settings or the network: it fetches and sends nothing by itself |
+| **Safeguards** | one run may take 500 ms and hold 96 kB of memory; three failures in a row switch that card's script off; if the device restarts in the middle of a script, the script is switched off at the next boot (safe mode) |
+| **Size** | a program of at most 6000 bytes, a whole card of at most 8192 bytes |
+| **Writing one** | `tools/make_script_card.py` packs a `.be` program and a `.json` description into one card; the simulator in [tools/sim](tools/sim) runs a card on a PC, without the board |
+
+It is still a program. Take script cards only from a source you would trust
+with a firmware update. The script API and how to write a card:
+[cards/README.md](cards/README.md#karty-se-skriptem) (in Czech).
+
+### Card store
+
+Cards from this repository can be added without downloading a file: in the
+device's web UI, **Store** tab, **Load the offer**, then **Add** next to a
+card. The offer is the list in [cards/index.json](cards/index.json). The
+device checks the signature of the list (ECDSA P-256) against a key in the
+firmware and compares each card with the SHA-256 the list gives for it; a
+changed, unsigned or older list is refused. The signature only says that the
+holder of the key published the list, not that anyone vetted the cards.
+Details and how to run your own store:
+[cards/README.md](cards/README.md#obchod-s-kartami) (in Czech).
+
+### Common to all cards
+
+| | |
+| --- | --- |
+| **Management** | upload and removal in the device's web UI, Screens tab, or adding from the store; behind the admin password if one is set |
+| **Storage** | LittleFS in the `spiffs` partition, which the project did not use until now; cards survive a restart and a firmware update |
+| **Fetching** | every 5 to 1440 minutes (60 by default); after a failure the last values stay on screen with a note and the device retries in 2 minutes |
+| **Default** | the Cards screen is off, and while it is off it fetches nothing; scripts are allowed separately |
+| **Screen dots** | the row of dots at the top is hidden by default; **Show the screen dots at the top** on the Screens tab switches it on, and the change shows at once |
+| **API** | `/api/cards` (GET, POST), `/api/cards/delete` (POST), `/api/store` (GET), `/api/store/install` (POST), `/api/scripts` (POST); `cards` was added to `/api/config`, `/api/status` and `/api/ha` |
+| **Cost** | cards make the binary 56 kB larger, the store another 12 kB, scripts about another 100 kB; no library to install was added (the Berry interpreter is bundled) |
+| **Limitation** | a card cannot send HTTP headers yet (such as `Authorization`), so only what can be read without logging in works |
+
+The full format description is in [cards/README.md](cards/README.md) (in Czech).
 
 ## For developers
 

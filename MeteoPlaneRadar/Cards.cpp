@@ -73,8 +73,17 @@ static bool parseCard(JsonObjectConst o, Card* c, char* err, size_t errCap) {
   strcpy(c->id, id);
 
   if (!take(o["title"], c->title, sizeof(c->title), true, "title", err, errCap)) return false;
-  if (!take(o["url"], c->url, sizeof(c->url), true, "url", err, errCap)) return false;
-  if (strncmp(c->url, "http://", 7) != 0 && strncmp(c->url, "https://", 8) != 0) {
+  // A card with a "script" draws itself (Script.h). It may show the clock
+  // alone and need no address, and it needs no rows.
+  const char* script = o["script"] | "";
+  c->hasScript = (*script != '\0');
+  if (strlen(script) > SCRIPT_SRC_MAX) {
+    snprintf(err, errCap, "script is longer than %d bytes", (int)SCRIPT_SRC_MAX);
+    return false;
+  }
+
+  if (!take(o["url"], c->url, sizeof(c->url), !c->hasScript, "url", err, errCap)) return false;
+  if (c->url[0] && strncmp(c->url, "http://", 7) != 0 && strncmp(c->url, "https://", 8) != 0) {
     snprintf(err, errCap, "url must start with http:// or https://");
     return false;
   }
@@ -83,7 +92,7 @@ static bool parseCard(JsonObjectConst o, Card* c, char* err, size_t errCap) {
   c->refreshMin = (uint16_t)constrain(refresh, CARD_REFRESH_MIN, 1440);
 
   JsonArrayConst rows = o["rows"];
-  if (rows.isNull() || rows.size() == 0 || rows.size() > CARD_ROWS_MAX) {
+  if (rows.size() > CARD_ROWS_MAX || (!c->hasScript && (rows.isNull() || rows.size() == 0))) {
     snprintf(err, errCap, "rows must hold 1 to %d items", CARD_ROWS_MAX);
     return false;
   }
@@ -99,6 +108,21 @@ static bool parseCard(JsonObjectConst o, Card* c, char* err, size_t errCap) {
     c->nRows++;
   }
 
+  if (c->hasScript) {
+    c->redrawS = (uint16_t)constrain((int)(o["redraw_s"] | 0), 0, 3600);
+    JsonArrayConst keep = o["keep"];
+    if (keep.size() > CARD_KEEP_MAX) {
+      snprintf(err, errCap, "keep must hold at most %d paths", CARD_KEEP_MAX);
+      return false;
+    }
+    for (JsonVariantConst k : keep) {
+      char* dst = c->keep[c->nKeep];
+      if (!take(k, dst, sizeof(c->keep[0]), true, "keep path", err, errCap)) return false;
+      if (!pathOk(dst)) { snprintf(err, errCap, "keep path is malformed: %s", dst); return false; }
+      c->nKeep++;
+    }
+  }
+
   JsonObjectConst note = o["note"];
   if (!note.isNull()) {
     if (!take(note["path"], c->notePath, sizeof(c->notePath), true, "note path", err, errCap)) return false;
@@ -111,15 +135,32 @@ static bool parseCard(JsonObjectConst o, Card* c, char* err, size_t errCap) {
 // --- The table --------------------------------------------------------------
 // Kept sorted by id, so the order on the display does not depend on the order
 // the filesystem happens to list its directory in.
+static uint32_t s_installNo = 0;
+
+static void freeData(Card* c) {
+  if (c->data) { free(c->data); c->data = nullptr; }
+}
+
+// A script that was switched off (Script.h) gets a fresh start when its card
+// is installed again or removed. The marker is a file next to the card.
+static void clearOffMarker(const char* id) {
+  char p[48];
+  snprintf(p, sizeof(p), CARDS_DIR "/%s.off", id);
+  if (LittleFS.exists(p)) LittleFS.remove(p);
+}
+
 static void insertSorted(const Card* c) {
   int at = 0;
   while (at < s_n && strcmp(s_cards[at].id, c->id) < 0) at++;
   if (at < s_n && strcmp(s_cards[at].id, c->id) == 0) {
+    freeData(&s_cards[at]);
     s_cards[at] = *c;                               // same id: replace
+    s_cards[at].installNo = ++s_installNo;
   } else {
     if (s_n >= CARDS_MAX) return;
     memmove(&s_cards[at + 1], &s_cards[at], (size_t)(s_n - at) * sizeof(Card));
     s_cards[at] = *c;
+    s_cards[at].installNo = ++s_installNo;
     s_n++;
   }
   s_rev++;
@@ -128,6 +169,12 @@ static void insertSorted(const Card* c) {
 static int indexOf(const char* id) {
   for (int i = 0; i < s_n; i++) if (strcmp(s_cards[i].id, id) == 0) return i;
   return -1;
+}
+
+const char* Cards_Data(const Card* c) { return (c && c->data && c->dataRev) ? c->data : nullptr; }
+Card* Cards_Mutable(const char* id) {
+  const int i = id ? indexOf(id) : -1;
+  return i < 0 ? nullptr : &s_cards[i];
 }
 
 static void filePath(char* out, size_t cap, const char* id) {
@@ -200,6 +247,7 @@ bool Cards_Install(JsonObjectConst card, char* err, size_t errCap) {
     return false;
   }
 
+  clearOffMarker(tmp.id);
   insertSorted(&tmp);        // values start empty, so the next tick fetches it
   Serial.printf("Karty: ulozena %s\n", tmp.id);
   return true;
@@ -213,6 +261,8 @@ bool Cards_Remove(const char* id) {
   char path[48];
   filePath(path, sizeof(path), id);
   LittleFS.remove(path);
+  clearOffMarker(id);
+  freeData(&s_cards[i]);
   memmove(&s_cards[i], &s_cards[i + 1], (size_t)(s_n - i - 1) * sizeof(Card));
   s_n--;
   s_rev++;
@@ -283,17 +333,39 @@ static bool fetch(Card* c) {
     filtered = CardPath_AddToFilter(filter, c->rows[i].path) && filtered;
   if (c->notePath[0])
     filtered = CardPath_AddToFilter(filter, c->notePath) && filtered;
+  for (uint8_t i = 0; i < c->nKeep; i++)
+    filtered = CardPath_AddToFilter(filter, c->keep[i]) && filtered;
+  // A script card that names no path at all gets the whole answer.
+  const bool anyPath = c->nRows || c->notePath[0] || c->nKeep;
+  if (!anyPath) filtered = false;
 
   JsonDocument doc;
   DeserializationError e = filtered
       ? deserializeJson(doc, body, DeserializationOption::Filter(filter))
       : deserializeJson(doc, body);
-  body = String();
   if (e) {
     Serial.printf("CARD: %s JSON %s\n", c->id, e.c_str());
     Status_Set(ST_CARDS, "%s: chybny JSON", c->id);
     return false;
   }
+
+  // What the script will be handed: the parts the card's paths keep, or the
+  // answer as it came. Either way it has to fit, and it is stored as text -
+  // the interpreter turns it into its own objects when it needs them.
+  if (c->hasScript) {
+    const size_t need = anyPath ? measureJson(doc) : body.length();
+    if (need > SCRIPT_DATA_MAX) {
+      Status_Set(ST_CARDS, "%s: odpoved %u B, skript unese %d", c->id, (unsigned)need, (int)SCRIPT_DATA_MAX);
+      return false;
+    }
+    if (!c->data) c->data = (char*)heap_caps_malloc(SCRIPT_DATA_MAX + 1, MALLOC_CAP_SPIRAM);
+    if (!c->data) c->data = (char*)malloc(SCRIPT_DATA_MAX + 1);
+    if (!c->data) { Status_Set(ST_CARDS, "%s: neni pamet", c->id); return false; }
+    if (anyPath) serializeJson(doc, c->data, SCRIPT_DATA_MAX + 1);
+    else         memcpy(c->data, body.c_str(), need + 1);
+    c->dataRev++;
+  }
+  body = String();
 
   // Into a scratch copy first: a fetch that finds nothing must not wipe the
   // values that are on the screen.
@@ -308,7 +380,7 @@ static bool fetch(Card* c) {
     if (formatValue(CardPath_Resolve(root, r.path), r.decimals, r.scale, val[i], sizeof(val[i]), &num[i]))
       found++;
   }
-  if (found == 0) {
+  if (found == 0 && c->nRows > 0) {
     Status_Set(ST_CARDS, "%s: hodnoty v odpovedi nejsou", c->id);
     return false;
   }
@@ -333,13 +405,14 @@ void Cards_Tick() {
   const unsigned long now = millis();
   for (int i = 0; i < s_n; i++) {
     Card* c = &s_cards[i];
+    if (!c->url[0]) continue;                      // a script card without an address
     const unsigned long period = (c->valid && !c->stale)
         ? (unsigned long)c->refreshMin * 60000UL : CARD_RETRY_MS;
     if (c->everTried && now - c->lastTry < period) continue;
 
     c->everTried = true;
     c->lastTry = now;
-    if (fetch(c)) { c->valid = true; c->stale = false; }
+    if (fetch(c)) { c->valid = true; c->stale = false; c->lastOk = now; }
     else          { c->stale = true; }
     s_rev++;
     return;                          // one request per tick, never two in a row

@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "id": "kurzy-listek",
+  "title": "Kurzovní lístek",
+  "url": "https://api.cnb.cz/cnbapi/exrates/daily?lang=EN",
+  "refresh_min": 60,
+  "keep": ["rates[0].currencyCode", "rates[0].rate", "rates[0].amount", "rates[0].validFor"],
+  "params": { "codes": ["EUR", "USD", "GBP", "CHF", "PLN", "HUF"] },
+  "script_file": "kurzy-listek.be"
+}

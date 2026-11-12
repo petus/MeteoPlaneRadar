@@ -6,5 +6,17 @@
   "svatek": {
     "cs": "Kdo má dnes svátek podle českého kalendáře.",
     "en": "Whose name day it is today in the Czech calendar."
+  },
+  "kurzy-listek": {
+    "cs": "Kurzovní lístek ČNB: šest měn pod sebou. Karta se skriptem.",
+    "en": "The Czech National Bank's list: six currencies in a table. A script card."
+  },
+  "den": {
+    "cs": "Kolik dne už uběhlo, prstenec a čas. Karta se skriptem, bez internetu.",
+    "en": "How much of the day has passed, as a ring and the time. A script card; needs no internet."
+  },
+  "web-chiptron": {
+    "cs": "Žije web chiptron.cz? Kontrola každých 5 minut; zelená fajfka, nebo po třech nezdarech červený křížek. Karta se skriptem.",
+    "en": "Is chiptron.cz up? Checked every 5 minutes; a green tick, or a red cross after three failures in a row. A script card."
   }
 }

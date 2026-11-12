@@ -15,12 +15,14 @@ mkdir -p "$out"
 bin=${SIM_BUILD:-$out}/sim
 if [ ! -x "$bin" ] || [ -n "$SIM_REBUILD" ]; then
   gcc -c -O1 -I "$src" "$src/qrcode.c" -o "$out/qrcode.o"
+  mkdir -p "$out/berry"
+  for f in "$src"/src/berry/src/*.c; do gcc -c -O1 -w "$f" -o "$out/berry/$(basename "$f" .c).o"; done
   g++ -std=c++17 -O1 -w \
     -DARDUINOJSON_ENABLE_ARDUINO_STRING=1 -DARDUINOJSON_ENABLE_ARDUINO_STREAM=1 \
     -DARDUINOJSON_ENABLE_ARDUINO_PRINT=1 -DARDUINOJSON_ENABLE_PROGMEM=0 \
     -I "$here/shim" -I "$ARDUINOJSON" -I "$src" \
-    "$here/sim.cpp" "$src/ScreenCards.cpp" "$src/Cards.cpp" "$src/UI.cpp" "$src/Layout.cpp" \
-    "$src/AAFont.cpp" "$src/Lang.cpp" "$out/qrcode.o" -o "$bin"
+    "$here/sim.cpp" "$src/ScreenCards.cpp" "$src/Cards.cpp" "$src/Script.cpp" "$src/UI.cpp" "$src/Layout.cpp" \
+    "$src/AAFont.cpp" "$src/Lang.cpp" "$out/qrcode.o" "$out"/berry/*.o -o "$bin"
 fi
 "$bin" "$card" "$answer" "$out" "$lang" "$status"
 for f in "$out"/*.ppm; do

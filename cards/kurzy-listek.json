@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "id": "kurzy-listek",
+  "title": "Kurzovní lístek",
+  "url": "https://api.cnb.cz/cnbapi/exrates/daily?lang=EN",
+  "refresh_min": 60,
+  "keep": [
+    "rates[0].currencyCode",
+    "rates[0].rate",
+    "rates[0].amount",
+    "rates[0].validFor"
+  ],
+  "params": {
+    "codes": [
+      "EUR",
+      "USD",
+      "GBP",
+      "CHF",
+      "PLN",
+      "HUF"
+    ]
+  },
+  "script": "# Kurzovní lístek ČNB: více měn pod sebou, částka vlevo, kurz zarovnaný vpravo.\n# Které měny se ukážou, říká \"params.codes\" v kartě.\nimport string\n\ndef draw()\n  g.label(cfg.title(), 74, 3, g.CYAN)\n  var d = net.data()\n  if d == nil\n    g.label(cfg.lang() == 'en' ? 'loading' : 'načítám', 228, 2, g.YELLOW)\n    return\n  end\n  var by = {}\n  for r : d['rates'] by[r['currencyCode']] = r end\n  var y = 126\n  for code : cfg.get('codes', ['EUR', 'USD'])\n    var r = by.find(code)\n    if r != nil && y < 340\n      var rate = format('%.3f', r['rate'])\n      if cfg.lang() != 'en' rate = string.replace(rate, '.', ',') end\n      g.text(format('%d %s', r['amount'], code), 112, y, 3, g.GRAY)\n      g.text(rate, 368 - g.text_w(rate, 3), y, 3, g.WHITE)\n      y += 38\n    end\n  end\n  g.label('ČNB ' + d['rates'][0]['validFor'], 404, 2, g.GRAY)\nend\n"
+}

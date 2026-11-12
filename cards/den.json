@@ -1,0 +1,7 @@
+{
+  "v": 1,
+  "id": "den",
+  "title": "Den",
+  "redraw_s": 20,
+  "script": "# Kolik dne už uběhlo: prstenec a čas uprostřed. Nepotřebuje internet,\n# jen hodiny zařízení; překresluje se sama podle \"redraw_s\" v kartě.\ndef draw()\n  var s = cfg.hms()\n  g.ring(240, 240, 150, 168, 0, 360, g.DKGRAY)\n  if s == nil\n    g.label(cfg.lang() == 'en' ? 'waiting for the clock' : 'čekám na čas', 232, 2, g.YELLOW)\n    return\n  end\n  g.ring(240, 240, 150, 168, 0, s * 360 / 86400, g.CYAN)\n  g.label(format('%02d:%02d', s / 3600, (s % 3600) / 60), 190, 5, g.WHITE)\n  var txt = cfg.lang() == 'en' ? '%d %% of the day' : '%d %% dne'\n  g.label(format(txt, s * 100 / 86400), 246, 2, g.GRAY)\n  g.label(cfg.title(), 286, 2, g.CYAN)\nend\n"
+}

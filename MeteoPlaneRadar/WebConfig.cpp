@@ -20,6 +20,7 @@
 #include "Cards.h"
 #include "ScreenCards.h"
 #include "Store.h"
+#include "Script.h"
 #include "NightMode.h"
 #include "UI.h"
 #include "Display_ST7701.h"
@@ -553,6 +554,7 @@ static void handleCardsList() {
   JsonDocument doc;
   doc["ready"] = Cards_FsReady();
   doc["max"] = CARDS_MAX;
+  doc["scripts"] = Script_Enabled();
   JsonArray a = doc["cards"].to<JsonArray>();
   for (int i = 0; i < Cards_Count(); i++) {
     const Card* c = Cards_Get(i);
@@ -562,6 +564,13 @@ static void handleCardsList() {
     o["url"] = c->url;
     o["ok"] = c->valid && !c->stale;
     o["tried"] = c->everTried;
+    if (c->hasScript) {
+      // a card that carries a program, and whether that program was switched off
+      char why[64] = "";
+      o["script"] = true;
+      o["off"] = Script_IsOff(c->id, why, sizeof(why));
+      if (why[0]) o["why"] = why;
+    }
   }
   sendJson(200, doc);
 }
@@ -588,6 +597,19 @@ static void handleCardsDelete() {
     s_srv.send(404, "application/json", "{\"error\":\"not found\"}");
     return;
   }
+  s_srv.send(200, "application/json", "{\"ok\":true}");
+}
+
+// Script cards: the global switch ({"enabled": true|false}) and switching one
+// card's script back on after it was stopped ({"on": "<id>"}). Both are behind
+// the admin password - they decide whether programs run on the device.
+static void handleScripts() {
+  JsonDocument doc;
+  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
+  if (!authed(doc)) return;
+  if (doc["enabled"].is<bool>()) Script_SetEnabled(doc["enabled"].as<bool>());
+  const char* on = doc["on"] | "";
+  if (*on) Script_SwitchOn(on);
   s_srv.send(200, "application/json", "{\"ok\":true}");
 }
 
@@ -863,6 +885,7 @@ void WebConfig_Begin(bool apMode) {
   s_srv.on("/api/cards", HTTP_GET, handleCardsList);
   s_srv.on("/api/cards", HTTP_POST, handleCardsInstall);
   s_srv.on("/api/cards/delete", HTTP_POST, handleCardsDelete);
+  s_srv.on("/api/scripts", HTTP_POST, handleScripts);
   s_srv.on("/api/store", HTTP_GET, handleStoreList);
   s_srv.on("/api/store/install", HTTP_POST, handleStoreInstall);
   s_srv.on("/api/reboot", HTTP_POST, handleReboot);

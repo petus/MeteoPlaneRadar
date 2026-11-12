@@ -735,7 +735,7 @@
 // ---------------------------------------------------------------------------
 #define CARDS_MAX          8         // installed at once
 #define CARD_ROWS_MAX      4         // values on one card
-#define CARD_FILE_MAX      2048      // bytes of one card's JSON
+#define CARD_FILE_MAX      8192      // bytes of one card's JSON (a script card carries its program)
 #define CARD_REFRESH_MIN   5         // minutes; a card may not ask for less
 #define CARD_REFRESH_DEF   60
 #define CARD_RETRY_MS      120000UL  // after a failed fetch
@@ -750,3 +750,13 @@
 #define STORE_INDEX_URL    "https://raw.githubusercontent.com/petus/MeteoPlaneRadar/HEAD/cards/index.json"
 #define STORE_INDEX_MAX    (32 * 1024)   // bytes of index.json the device accepts
 #define STORE_CACHE_MS     120000UL      // a verified index is reused this long
+
+// ---------------------------------------------------------------------------
+//  Script cards (0.9.0) - see Script.h
+// ---------------------------------------------------------------------------
+#define SCRIPT_SRC_MAX     6000          // bytes of Berry source in one card
+#define SCRIPT_DATA_MAX    8192          // bytes of JSON a script card keeps from its answer
+#define SCRIPT_HEAP_MAX    (96 * 1024)   // bytes the interpreter of one card may hold (PSRAM)
+#define SCRIPT_TIME_MS     500           // one run of a script may take this long
+#define SCRIPT_FAIL_MAX    3             // failures in a row before a card's script is switched off
+#define CARD_KEEP_MAX      6             // "keep" paths of a script card

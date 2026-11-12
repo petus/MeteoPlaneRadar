@@ -1,0 +1,7 @@
+{
+  "v": 1,
+  "id": "den",
+  "title": "Den",
+  "redraw_s": 20,
+  "script_file": "den.be"
+}

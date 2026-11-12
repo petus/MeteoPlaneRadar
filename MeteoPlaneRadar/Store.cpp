@@ -134,6 +134,7 @@ bool Store_List(JsonDocument& out, char* err, size_t errCap) {
     o["size"] = e["size"];
     o["desc"]["cs"] = e["desc"]["cs"] | "";
     o["desc"]["en"] = e["desc"]["en"] | "";
+    o["script"] = e["script"] | false;       // a card that carries a program (Script.h)
     o["installed"] = installed(e["id"] | "");
   }
   return true;

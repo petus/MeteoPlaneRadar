@@ -99,6 +99,7 @@
 #include "ScreenPrice.h"
 #include "ScreenMix.h"
 #include "Cards.h"
+#include "Script.h"
 #include "ScreenCards.h"
 #include "ScreenSettings.h"
 #include "Forecast.h"
@@ -637,6 +638,7 @@ void setup() {
   // formats the (so far unused) filesystem partition, and a flash write is
   // best done while there is no frame on the glass to disturb.
   Cards_Begin();
+  Script_Begin();            // card scripts: the on/off switch and the safe-mode check
   CHMU_SetMasked(Settings_RadarSource() == RADAR_SRC_CHMU_MASKED);
   TimeZone_Begin();      // compiled-in default; the forecast may correct it
   Layout_SelfTest();         // no-op unless LAYOUT_DEBUG is on

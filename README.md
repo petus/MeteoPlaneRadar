@@ -23,7 +23,7 @@ ESP32-S3-Touch-LCD-2.1 a ESP32-S3-Touch-LCD-2.8C a nastavuje se z prohlížeče.
 | **Předpověď** | nyní, +3 h, +6 h, dnes, zítra, pozítří a další dny, ovzduší a pyl | Open-Meteo |
 | **Cena elektřiny** | spotová cena na 24hodinovém ciferníku, dnes i zítra | OTE přes spotovaelektrina.cz |
 | **Výroba ČR** | z čeho se právě vyrábí, podíl OZE, spotřeba, vývoz | ENTSO-E přes energy-charts |
-| **Karty** | vlastní hodnoty z libovolného JSON rozhraní, např. kurzy ČNB | podle karty, viz [cards](cards/README.md) |
+| **Karty** | vlastní obrazovky: hodnoty z libovolného JSON rozhraní (např. kurzy ČNB) nebo karta s vlastním programem | podle karty, viz [cards](cards/README.md) |
 | **Nastavení** | jas, orientace mapy, jednotky, jazyk | — |
 
 Prvních sedm jde vypnout, Nastavení je dostupné vždy. Rozhraní je česky nebo
@@ -193,14 +193,125 @@ adresy `/api/screen` a `/api/range` jde volat přes `rest_command`.
 
 ## Karty
 
-Obrazovka **Karty** ukazuje hodnoty, které si doplníte sami: karta je malý
-soubor JSON, který říká, odkud se má hodnota stáhnout a jak ji pojmenovat.
-Neobsahuje žádný kód. Nahrává se z webu (záložka Obrazovky) a ukládá se do
-flash, takže přežije restart i aktualizaci firmwaru. Ukázková karta s kurzy
-ČNB a popis formátu jsou ve složce [cards](cards/README.md).
+Karty jsou vlastní obrazovky, které si doplníte sami. Každá karta je samostatná
+obrazovka: střídá se s ostatními ve stejném intervalu, takže čtyři vestavěné
+obrazovky a dvě karty dávají šest obrazovek. Karet může být nejvýš 8. Řada
+teček nahoře, která má jednu tečku za každou obrazovku i kartu, je proto ve
+výchozím stavu skrytá; zapnout jde na webu zařízení. Patří k nim tři části:
 
-Obrazovka je po aktualizaci vypnutá a dokud je vypnutá, zařízení kvůli ní nic
-nestahuje.
+| | |
+| --- | --- |
+| **[JSON karty](#json-karty)** | karta bez programu: malý soubor říká, odkud stáhnout odpověď a které hodnoty z ní ukázat; rozvržení dělá firmware |
+| **[Karty se skriptem](#karty-se-skriptem-program-v-kartě)** | karta s **vlastním programem** v jazyce Berry, který si celý displej kreslí sám |
+| **[Obchod s kartami](#obchod-s-kartami)** | zařízení si karty z tohoto repozitáře přidá samo a předtím ověří jejich podpis |
+
+<p align="center">
+  <img src="cards/nahled-kurzy-cnb.png" width="300" alt="Náhled karty Kurzy ČNB na kulatém displeji">
+  <img src="cards/nahled-svatek.png" width="300" alt="Náhled karty Svátek na kulatém displeji">
+</p>
+<p align="center">
+  <img src="cards/nahled-kurzy-listek.png" width="300" alt="Náhled karty se skriptem Kurzovní lístek">
+  <img src="cards/nahled-den.png" width="300" alt="Náhled karty se skriptem Den">
+  <img src="cards/nahled-web-chiptron.png" width="300" alt="Náhled karty se skriptem hlídání webu chiptron.cz">
+</p>
+<p align="center"><sub>Náhledy ukázkových karet: nahoře dvě karty JSON, dole tři karty se skriptem. Obrazovky vykreslil kód firmwaru spuštěný na PC se skutečnými odpověďmi zdrojů (kurzy z 11. 11. 2026, svátek z 12. 11. 2026); nejsou to fotky z desky.</sub></p>
+
+### JSON karty
+
+Karta JSON ukazuje hodnoty, které si doplníte sami: kurzy měn, teplotu
+z domácí automatizace, cokoli, co má JSON rozhraní dostupné bez přihlášení.
+Je to malý soubor, který říká, odkud se má stáhnout odpověď, které hodnoty
+z ní vybrat a jak je pojmenovat. Tenhle druh karty je popis, ne program:
+rozvržení na kulatém displeji dělá firmware.
+
+Ukázková karta s kurzy ČNB ([cards/kurzy-cnb.json](cards/kurzy-cnb.json)):
+
+```json
+{
+  "v": 1,
+  "id": "kurzy-cnb",
+  "title": "Kurzy ČNB",
+  "url": "https://api.cnb.cz/cnbapi/exrates/daily?lang=EN",
+  "refresh_min": 60,
+  "rows": [
+    { "label": "1 EUR", "path": "rates[currencyCode=EUR].rate", "decimals": 3, "unit": "Kč" },
+    { "label": "1 USD", "path": "rates[currencyCode=USD].rate", "decimals": 3, "unit": "Kč" }
+  ],
+  "note": { "label": "ČNB", "path": "rates[0].validFor" }
+}
+```
+
+Druhá ukázka, [cards/svatek.json](cards/svatek.json), ukazuje textovou hodnotu:
+kdo má dnes svátek, podle nameday.abalin.net.
+
+| | |
+| --- | --- |
+| **Hodnoty** | na kartě 1 až 4 hodnoty a volitelný malý řádek dole |
+| **Cesta k hodnotě** | `data.amount`, `list[0].price` nebo `rates[currencyCode=EUR].rate` — prvek pole podle obsahu, ne podle pořadí |
+| **Formát hodnoty** | popisek, jednotka, počet desetinných míst, násobitel; v češtině s desetinnou čárkou |
+
+### Karty se skriptem: program v kartě
+
+Karta JSON umí jen několik hodnot v pevném rozvržení. Karta, která má navíc
+položku `script`, v sobě nese **program** v jazyce
+[Berry](https://berry-lang.github.io) a celý displej si kreslí sama: tabulky,
+prstence, vlastní rozvržení. Adresu uvedenou v kartě dál stahuje zařízení;
+program rozhodne, co z odpovědi nakreslí.
+
+Program ukázkové karty Den ([cards/src/den.be](cards/src/den.be), zkráceno):
+prstenec ukazuje, kolik dne už uběhlo.
+
+```berry
+def draw()
+  var s = cfg.hms()   # sekundy od půlnoci
+  g.ring(240, 240, 150, 168, 0, 360, g.DKGRAY)
+  if s == nil
+    g.label('čekám na čas', 232, 2, g.YELLOW)
+    return
+  end
+  g.ring(240, 240, 150, 168, 0, s * 360 / 86400, g.CYAN)
+  g.label(format('%02d:%02d', s / 3600, (s % 3600) / 60), 190, 5, g.WHITE)
+end
+```
+
+| | |
+| --- | --- |
+| **Ukázky** | [kurzy-listek.json](cards/kurzy-listek.json) — kurzovní lístek ČNB, šest měn pod sebou se zarovnanými čísly; [den.json](cards/den.json) — kolik dne už uběhlo, nepotřebuje internet; [web-chiptron.json](cards/web-chiptron.json) — žije web chiptron.cz? zelená fajfka, nebo po třech nezdarech za sebou červený křížek ([popis](cards/README.md#ukázka-hlídání-webu)). Programy jsou ve složce [cards/src](cards/src) |
+| **Zapnutí** | skripty jsou ve výchozím stavu **vypnuté**. Zapínají se na webu zařízení, záložka Obrazovky, volba **Povolit skripty v kartách**. Dokud jsou vypnuté, karta se skriptem ukáže jen nadpis a hlášení, že skript neběží |
+| **Co program smí** | kreslit (`g`), číst odpověď z adresy své karty (`net`), číst parametry karty a čas (`cfg`). Nemá přístup k souborům, k nastavení ani k síti: sám nic nestáhne ani neodešle |
+| **Pojistky** | jedno vykreslení smí trvat 500 ms a zabrat 96 kB paměti; po třech selháních za sebou se skript té karty vypne; restartuje-li se zařízení uprostřed skriptu, vypne se skript při dalším startu (bezpečný režim) |
+| **Velikost** | program nejvýš 6000 bajtů, celá karta nejvýš 8192 bajtů |
+| **Jak ji napsat** | program `.be` a popis `.json` složí do jedné karty `tools/make_script_card.py`; kartu jde vyzkoušet na počítači bez desky simulátorem v [tools/sim](tools/sim) |
+
+Přesto je to program. Karty se skriptem berte jen ze zdroje, kterému byste
+svěřili i aktualizaci firmwaru. Rozhraní pro skripty a postup, jak kartu
+napsat: [cards/README.md](cards/README.md#karty-se-skriptem).
+
+### Obchod s kartami
+
+Karty z tohoto repozitáře jde přidat bez stahování souboru: na webu zařízení,
+záložka **Obchod**, tlačítko **Načíst nabídku** a u vybrané karty **Přidat**.
+Nabídka je seznam [cards/index.json](cards/index.json). Zařízení ověří podpis
+seznamu (ECDSA P-256) proti klíči ve firmwaru a každou kartu porovná
+s otiskem SHA-256 ze seznamu; změněný, nepodepsaný nebo starší seznam odmítne.
+Podpis říká jen to, že seznam zveřejnil držitel klíče, ne že karty někdo
+prověřil. Podrobnosti a postup pro vlastní obchod:
+[cards/README.md](cards/README.md#obchod-s-kartami).
+
+### Společné pro všechny karty
+
+| | |
+| --- | --- |
+| **Správa** | nahrání a odebrání na webu zařízení, záložka Obrazovky, nebo přidání z obchodu; s heslem správce, je-li nastavené |
+| **Uložení** | LittleFS v oddílu `spiffs`, který projekt dosud nepoužíval; karty přežijí restart i aktualizaci firmwaru |
+| **Stahování** | každých 5 až 1440 minut (výchozí 60); po chybě zůstanou poslední hodnoty s poznámkou a zkouší se znovu za 2 minuty |
+| **Výchozí stav** | obrazovka Karty je vypnutá a vypnutá nic nestahuje; skripty se povolují zvlášť |
+| **Tečky obrazovek** | řada teček nahoře je ve výchozím stavu skrytá; zapíná se na záložce Obrazovky volbou **Zobrazovat tečky obrazovek nahoře** a změna se projeví hned |
+| **API** | `/api/cards` (GET, POST), `/api/cards/delete` (POST), `/api/store` (GET), `/api/store/install` (POST), `/api/scripts` (POST); `cards` přibylo v `/api/config`, `/api/status` a `/api/ha` |
+| **Cena** | karty zvětšují binárku o 56 kB, obchod o dalších 12 kB, skripty o dalších asi 100 kB; žádná knihovna k instalaci nepřibyla (interpret Berry je přibalený) |
+| **Omezení** | karta zatím neumí poslat HTTP hlavičky (např. `Authorization`), takže funguje jen to, co jde přečíst bez přihlášení |
+
+Úplný popis formátu je v [cards/README.md](cards/README.md).
 
 ## Hodiny bez NTP
 

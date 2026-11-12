@@ -184,6 +184,8 @@ td:first-child{color:var(--mut);width:50%}
       <input type="file" id="cardFile" class="hide" accept="application/json,.json" onchange="cardInstall(this)">
     </div>
     <p class="hint" data-i18n="cardsHint"></p>
+    <div class="row"><label class="chk"><input type="checkbox" id="scriptsOn" onchange="scriptsSet(this.checked)"><span data-i18n="scriptsOn">Povolit skripty v kartách</span></label></div>
+    <p class="hint" data-i18n="scriptsHint"></p>
   </div>
 
   <div class="card">
@@ -439,6 +441,8 @@ td:first-child{color:var(--mut);width:50%}
 const D={
  cs:{tabCtl:"Ovládání",tabLoc:"Poloha",tabScr:"Obrazovky",tabLook:"Vzhled",tabPlanes:"Letadla",tabEnergy:"Energie",tabSys:"Systém",
   scrPrice:"Cena elektřiny",scrMix:"Výroba ČR",
+  scriptsOn:"Povolit skripty v kartách",cardScript:"skript",scriptOff:"skript zastaven",scriptRun:"Zapnout",
+  scriptsHint:"Karta se skriptem si displej kreslí sama malým programem (jazyk Berry). Program nemá přístup k souborům, nastavení ani k síti — data mu podává zařízení z adresy uvedené v kartě — a má omezený čas i paměť. Přesto je to program: zapínejte jen pro karty ze zdroje, kterému byste svěřili i aktualizaci firmwaru. Skript, který opakovaně selže nebo při kterém se zařízení restartuje, se zastaví sám.",
   tabStore:"Obchod",storeHdr:"Obchod s kartami",storeLoad:"Načíst nabídku",storeAdd:"Přidat",storeUpd:"Nahrát znovu",
   storeHave:"nainstalováno",storeWait:"Stahuji nabídku a ověřuji podpis…",storeOk:"Podpis nabídky souhlasí, karet",storeErr:"Nabídku se nepodařilo načíst",
   storeIntro:"Nabídka karet připravených k přidání jedním klepnutím. Zařízení si seznam stáhne samo a přijme ho jen tehdy, když jeho podpis souhlasí s klíčem ve firmwaru. Přidaná karta se objeví na záložce Obrazovky mezi ostatními.",
@@ -536,6 +540,8 @@ const D={
   icBalloon:"balony a vzducholodě",icDrone:"drony",icGeneric:"nezjištěný typ",icNoTrack:"neznámý směr letu",},
  en:{tabCtl:"Control",tabLoc:"Location",tabScr:"Screens",tabLook:"Appearance",tabPlanes:"Aircraft",tabEnergy:"Energy",tabSys:"System",
   scrPrice:"Electricity price",scrMix:"Czech generation",
+  scriptsOn:"Allow scripts in cards",cardScript:"script",scriptOff:"script stopped",scriptRun:"Switch on",
+  scriptsHint:"A card with a script draws the display itself with a small program (in Berry). The program cannot reach files, settings or the network - the device hands it the data from the address written in the card - and its time and memory are limited. It is still a program: allow it only for cards from a source you would also trust with a firmware update. A script that keeps failing, or during which the device restarts, stops itself.",
   tabStore:"Store",storeHdr:"Card store",storeLoad:"Load the offer",storeAdd:"Add",storeUpd:"Install again",
   storeHave:"installed",storeWait:"Downloading the offer and checking its signature…",storeOk:"The signature of the offer matches, cards",storeErr:"The offer could not be loaded",
   storeIntro:"Cards ready to be added with one tap. The device downloads the list itself and accepts it only if its signature matches the key in the firmware. An added card shows up on the Screens tab with the others.",
@@ -978,9 +984,12 @@ async function cardsLoad(){
  try{const c=await(await fetch("/api/cards")).json();
  $("cardsTab").innerHTML=c.cards.length?c.cards.map(k=>{
   let h="";try{h=new URL(k.url).host}catch(e){}
-  return "<tr><td><b>"+escHtml(k.title)+"</b><br><small>"+k.id+" · "+escHtml(h)+"</small></td><td>"+
-   (k.ok?"OK":(k.tried?D[L].cardErr:D[L].cardWait))+"</td><td><button class='danger' onclick='cardDel(\""+k.id+
-   "\")'>"+D[L].cardDel+"</button></td></tr>";}).join(""):"<tr><td>"+D[L].cardsNone+"</td></tr>";}catch(e){}
+  return "<tr><td><b>"+escHtml(k.title)+"</b><br><small>"+k.id+(h?" · "+escHtml(h):"")+(k.script?" · "+D[L].cardScript:"")+
+   (k.off?"<br>"+D[L].scriptOff+": "+escHtml(k.why||""):"")+"</small></td><td>"+
+   (k.off?"<button class='sec' onclick='scriptRun(\""+k.id+"\")'>"+D[L].scriptRun+"</button>":
+    (k.ok||(k.script&&!h)?"OK":(k.tried?D[L].cardErr:D[L].cardWait)))+"</td><td><button class='danger' onclick='cardDel(\""+k.id+
+   "\")'>"+D[L].cardDel+"</button></td></tr>";}).join(""):"<tr><td>"+D[L].cardsNone+"</td></tr>";
+ $("scriptsOn").checked=!!c.scripts;}catch(e){}
 }
 async function cardPost(u,b){
  b.password=$("adminPass").value;
@@ -997,6 +1006,8 @@ async function cardInstall(el){
  await cardPost("/api/cards",{card:j});
 }
 function cardDel(id){cardPost("/api/cards/delete",{id:id});}
+function scriptsSet(on){cardPost("/api/scripts",{enabled:on});}
+function scriptRun(id){cardPost("/api/scripts",{on:id});}
 // Card store. The device fetches the index and checks its signature; this only
 // shows what the device accepted. Titles and descriptions come from the index,
 // so they are escaped; an id is restricted by the device to a-z, 0-9 and "-".
@@ -1007,7 +1018,7 @@ async function storeLoad(){
  if(!ok||!s||!s.cards){$("storeState").textContent=D[L].storeErr+(s&&s.error?": "+s.error:"");return;}
  $("storeState").textContent=D[L].storeOk+": "+s.cards.length;
  $("storeTab").innerHTML=s.cards.map(k=>"<tr><td><b>"+escHtml(k.title)+"</b><br><small>"+
-  escHtml((k.desc&&(k.desc[L]||k.desc.en||k.desc.cs))||"")+"<br>"+k.id+" · "+escHtml(k.host||"")+"</small></td><td>"+
+  escHtml((k.desc&&(k.desc[L]||k.desc.en||k.desc.cs))||"")+"<br>"+k.id+(k.host?" · "+escHtml(k.host):"")+(k.script?" · "+D[L].cardScript:"")+"</small></td><td>"+
   (k.installed?D[L].storeHave+"<br>":"")+"<button class='sec' onclick='storeInstall(\""+k.id+"\")'>"+
   (k.installed?D[L].storeUpd:D[L].storeAdd)+"</button></td></tr>").join("");
 }

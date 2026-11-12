@@ -47,6 +47,17 @@ struct Card {
   bool          stale;         // ...but the most recent attempt failed
   bool          everTried;
   unsigned long lastTry;
+  unsigned long lastOk;        // millis() of the last successful fetch
+
+  // Script cards (Script.h). The program itself stays in the card's file.
+  bool          hasScript;
+  uint16_t      redrawS;       // redraw every so many seconds (0 = only when the data changes)
+  uint8_t       nKeep;
+  char          keep[CARD_KEEP_MAX][72];   // what of the answer the script gets (all of it if none)
+  char*         data;          // that part of the last answer, as JSON text
+  uint32_t      dataRev;       // goes up with every new answer; 0 = none yet
+  uint8_t       scriptFails;   // failures in a row
+  uint32_t      installNo;     // differs for every install, so a replaced card is told from the old one
 };
 
 void Cards_Begin();            // mount the filesystem and load the cards
@@ -57,6 +68,11 @@ int         Cards_Count();
 const Card* Cards_Get(int i);  // nullptr when out of range
 // Changes whenever the list or any value does - the screen redraws on it.
 uint32_t    Cards_Revision();
+
+// Script cards: the JSON the card kept from its last answer (nullptr before
+// the first one), and the card itself for the script runner's bookkeeping.
+const char* Cards_Data(const Card* c);
+Card*       Cards_Mutable(const char* id);
 
 // Validates and stores a card (replacing one with the same id). On failure
 // err holds a short English reason for the web UI.

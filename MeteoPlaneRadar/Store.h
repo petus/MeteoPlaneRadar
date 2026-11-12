@@ -26,7 +26,7 @@
 #include <ArduinoJson.h>
 
 // Downloads and verifies the index. On success `out` is
-//   { "serial": N, "cards": [ { id, title, host, size, desc: {cs, en}, installed } ] }
+//   { "serial": N, "cards": [ { id, title, host, size, desc: {cs, en}, script, installed } ] }
 // On failure err holds a short English reason for the web UI.
 bool Store_List(JsonDocument& out, char* err, size_t errCap);
 

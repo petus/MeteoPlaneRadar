@@ -18,7 +18,7 @@ key=${MPR_STORE_KEY:-$HOME/.config/meteoplaneradar/store-signing-key.pem}
 
 python3 "$root/tools/make_index.py" --check
 
-cp "$root"/cards/index.json "$root"/cards/index.json.sig "$root"/cards/kurzy-cnb.json "$root"/cards/svatek.json "$fx/"
+cp "$root"/cards/index.json "$root"/cards/index.json.sig "$root"/cards/kurzy-cnb.json "$root"/cards/svatek.json "$root"/cards/den.json "$fx/"
 # an index changed after signing: one letter of a title
 sed 's/"title": "Svátek"/"title": "Svatek"/' "$fx/index.json" > "$fx/index-changed.json"
 # a signature that is valid, but made with a key the firmware does not know

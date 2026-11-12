@@ -48,6 +48,7 @@ STATUS = {
     "enabled": [True, True, True, True, False, False, True, True],
 }
 installed = {}        # id -> card
+state = {"scripts": False, "off": {}}     # the scripts switch; id -> why a script was stopped
 
 
 def store_offer():
@@ -55,7 +56,8 @@ def store_offer():
         idx = json.load(f)
     return {"serial": idx["serial"], "cards": [
         {"id": c["id"], "title": c["title"], "host": c["host"], "size": c["size"],
-         "desc": c["desc"], "installed": c["id"] in installed} for c in idx["cards"]]}
+         "desc": c["desc"], "script": c.get("script", False),
+         "installed": c["id"] in installed} for c in idx["cards"]]}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -76,9 +78,16 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/status":
             self.send(200, STATUS)
         elif path == "/api/cards":
-            self.send(200, {"ready": True, "max": 8, "cards": [
-                {"id": c["id"], "title": c["title"], "url": c["url"], "ok": True, "tried": True}
-                for c in sorted(installed.values(), key=lambda c: c["id"])]})
+            cards = []
+            for c in sorted(installed.values(), key=lambda c: c["id"]):
+                row = {"id": c["id"], "title": c["title"], "url": c.get("url", ""), "ok": True, "tried": True}
+                if c.get("script"):
+                    row["script"] = True
+                    row["off"] = c["id"] in state["off"]
+                    if row["off"]:
+                        row["why"] = state["off"][c["id"]]
+                cards.append(row)
+            self.send(200, {"ready": True, "max": 8, "scripts": state["scripts"], "cards": cards})
         elif path == "/api/store":
             self.send(200, store_offer())
         elif path in ("/api/wifilist", "/api/scan", "/api/geocode"):
@@ -101,6 +110,12 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/cards/delete":
             if installed.pop(body.get("id", ""), None) is None:
                 return self.send(404, {"error": "not found"})
+        elif path == "/api/scripts":
+            if isinstance(body.get("enabled"), bool):
+                state["scripts"] = body["enabled"]
+            state["off"].pop(body.get("on", ""), None)
+        elif path == "/api/mock/stop":            # not a device endpoint: lets a test play a stopped script
+            state["off"][body.get("id", "")] = body.get("why", "ran longer than 500 ms")
         elif path == "/api/store/install":
             cid = body.get("id", "")
             fpath = os.path.join(ROOT, "cards", cid + ".json")

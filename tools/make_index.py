@@ -45,7 +45,8 @@ DEFAULT_KEY = os.path.expanduser("~/.config/meteoplaneradar/store-signing-key.pe
 NOT_CARDS = {"index.json", "store-meta.json"}
 
 ID_RE = re.compile(r"^[a-z0-9-]{1,23}$")
-CARD_FILE_MAX = 2048          # Config.h
+CARD_FILE_MAX = 8192          # Config.h
+SCRIPT_SRC_MAX = 6000
 LIMITS = {"title": 27, "url": 199, "label": 19, "unit": 9, "path": 71}   # bytes, Cards.h
 
 
@@ -68,23 +69,34 @@ def check_card(name, raw):
         fail("%s: the file must be called %s.json" % (name, cid))
     if card.get("v", 1) != 1:
         fail("%s: unsupported card version" % name)
+    script = card.get("script", "")
+    if len(script.encode("utf-8")) > SCRIPT_SRC_MAX:
+        fail("%s: script is longer than %d bytes" % (name, SCRIPT_SRC_MAX))
+    # a script card draws itself: it needs no rows and may need no address
     for key in ("title", "url"):
         val = card.get(key, "")
+        if key == "url" and script and not val:
+            continue
         if not val or len(val.encode("utf-8")) > LIMITS[key]:
             fail("%s: %s is missing or longer than %d bytes" % (name, key, LIMITS[key]))
-    url = urlparse(card["url"])
-    if url.scheme not in ("http", "https") or not url.hostname:
-        fail("%s: url must start with http:// or https://" % name)
-    rows = card.get("rows")
-    if not isinstance(rows, list) or not 1 <= len(rows) <= 4:
+    host = ""
+    if card.get("url"):
+        url = urlparse(card["url"])
+        if url.scheme not in ("http", "https") or not url.hostname:
+            fail("%s: url must start with http:// or https://" % name)
+        host = url.hostname
+    rows = card.get("rows", [])
+    if not isinstance(rows, list) or len(rows) > 4 or (not script and len(rows) < 1):
         fail("%s: rows must hold 1 to 4 items" % name)
+    if len(card.get("keep", [])) > 6:
+        fail("%s: keep must hold at most 6 paths" % name)
     for row in rows:
         if not row.get("path") or len(row["path"].encode("utf-8")) > LIMITS["path"]:
             fail("%s: a row path is missing or too long" % name)
         for key in ("label", "unit"):
             if len(row.get(key, "").encode("utf-8")) > LIMITS[key]:
                 fail("%s: a row %s is longer than %d bytes" % (name, key, LIMITS[key]))
-    return card, url.hostname
+    return card, host
 
 
 def build_entries():
@@ -109,6 +121,8 @@ def build_entries():
             "host": host,
             "desc": {"cs": desc.get("cs", ""), "en": desc.get("en", "")},
         })
+        if card.get("script"):
+            entries[-1]["script"] = True       # the web UI marks cards that carry a program
     if not entries:
         fail("no cards found in " + CARDS)
     return entries

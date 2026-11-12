@@ -13,6 +13,7 @@
 #include "Lang.h"
 #include "Layout.h"
 #include "Route.h"
+#include "Script.h"
 #include "Settings.h"
 #include "UI.h"
 #include <WiFi.h>
@@ -20,13 +21,18 @@
 static int      s_cur = 0;
 static uint32_t s_lastRev = 0;
 static bool     s_dirty = true;
+static unsigned long s_lastDraw = 0;
 
-void ScreenCards_Enter() { s_dirty = true; }
+// Coming back to the screen starts the card's script afresh.
+void ScreenCards_Enter() { s_dirty = true; Script_Release(); }
 
 bool ScreenCards_Tick() {
   bool want = s_dirty;
   if (Cards_Revision() != s_lastRev) want = true;
   if (UI_StatusLineChanged()) want = true;
+  // A script card may ask to be redrawn on a schedule (a clock hand, a countdown).
+  const Card* c = Cards_Get(s_cur);
+  if (c && c->hasScript && c->redrawS && millis() - s_lastDraw >= (unsigned long)c->redrawS * 1000UL) want = true;
   return want;
 }
 
@@ -93,9 +99,15 @@ static void centered(const char* s, int y, uint16_t color, uint8_t want) {
   UI_TextCentered(s, top, color, size);
 }
 
+void ScreenCards_Label(const char* utf8, int y, uint16_t color, uint8_t size) {
+  char buf[96];
+  centered(panelText(buf, sizeof(buf), utf8), y, color, size);
+}
+
 void ScreenCards_Draw() {
   s_dirty = false;
   s_lastRev = Cards_Revision();
+  s_lastDraw = millis();
 
   gfx->fillScreen(C_BLACK);
   Layout_Begin();
@@ -113,6 +125,22 @@ void ScreenCards_Draw() {
   const Card* c = Cards_Get(s_cur);
 
   char buf[64];
+
+  // A script card draws the whole panel itself. The status line goes on top
+  // afterwards (and the screen dots after that, in the .ino), so they are
+  // always there whatever it drew.
+  if (c->hasScript) {
+    char why[72];
+    if (!Script_Draw(c, why, sizeof(why))) {
+      gfx->fillScreen(C_BLACK);                    // drop whatever it got to draw
+      centered(panelText(buf, sizeof(buf), c->title), 84, C_CYAN, 3);
+      centered(T(S_SCRIPT_STOPPED), LCD_HEIGHT / 2 - 24, C_YELLOW, 2);
+      centered(why, LCD_HEIGHT / 2 + 6, C_GRAY, 2);
+    }
+    UI_DrawStatusLine(LY_STATUS);
+    return;
+  }
+
   centered(panelText(buf, sizeof(buf), c->title), 84, C_CYAN, 3);
 
   if (!c->valid) {

@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "id": "web-chiptron",
+  "title": "chiptron.cz",
+  "url": "https://chiptron.cz/wp-json/?_fields=name",
+  "refresh_min": 5,
+  "redraw_s": 30,
+  "keep": ["name"],
+  "script_file": "web-chiptron.be"
+}
