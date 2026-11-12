@@ -1,0 +1,30 @@
+{
+ "v": 1,
+ "serial": 1,
+ "cards": [
+  {
+   "id": "kurzy-cnb",
+   "file": "kurzy-cnb.json",
+   "size": 408,
+   "sha256": "632ea3eb86d740d7a986049dec444906f4367573f69c110de32431688653947d",
+   "title": "Kurzy ČNB",
+   "host": "api.cnb.cz",
+   "desc": {
+    "cs": "Kurz eura a dolaru podle kurzovního lístku České národní banky.",
+    "en": "Euro and US dollar rates from the Czech National Bank's daily list."
+   }
+  },
+  {
+   "id": "svatek",
+   "file": "svatek.json",
+   "size": 221,
+   "sha256": "3c1bb60560ff1bd025f98447ccd4a6d6b991bfef6788122eff5192f2c07afa0d",
+   "title": "Svátek",
+   "host": "nameday.abalin.net",
+   "desc": {
+    "cs": "Kdo má dnes svátek podle českého kalendáře.",
+    "en": "Whose name day it is today in the Czech calendar."
+   }
+  }
+ ]
+}

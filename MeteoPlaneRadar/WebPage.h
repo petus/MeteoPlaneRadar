@@ -84,6 +84,7 @@ td:first-child{color:var(--mut);width:50%}
   <button data-tab="tCtl"    class="on" data-i18n="tabCtl">Ovládání</button>
   <button data-tab="tLoc"    data-i18n="tabLoc">Poloha</button>
   <button data-tab="tScr"    data-i18n="tabScr">Obrazovky</button>
+  <button data-tab="tStore"  data-i18n="tabStore">Obchod</button>
   <button data-tab="tLook"   data-i18n="tabLook">Vzhled</button>
   <button data-tab="tPlanes" data-i18n="tabPlanes">Letadla</button>
   <button data-tab="tEnergy" data-i18n="tabEnergy">Energie</button>
@@ -217,6 +218,17 @@ td:first-child{color:var(--mut);width:50%}
 </section>
 
 <!-- ================= VZHLED ================= -->
+<section id="tStore" class="tab hide">
+  <div class="card">
+    <h2 data-i18n="storeHdr">Obchod s kartami</h2>
+    <p class="hint" data-i18n="storeIntro"></p>
+    <div class="row"><button class="sec" onclick="storeLoad()" data-i18n="storeLoad">Načíst nabídku</button></div>
+    <p class="hint" id="storeState"></p>
+    <table id="storeTab"></table>
+    <p class="hint" data-i18n="storeHint"></p>
+  </div>
+</section>
+
 <section id="tLook" class="tab hide">
   <div class="card">
     <h2 data-i18n="brightness">Jas</h2>
@@ -427,6 +439,10 @@ td:first-child{color:var(--mut);width:50%}
 const D={
  cs:{tabCtl:"Ovládání",tabLoc:"Poloha",tabScr:"Obrazovky",tabLook:"Vzhled",tabPlanes:"Letadla",tabEnergy:"Energie",tabSys:"Systém",
   scrPrice:"Cena elektřiny",scrMix:"Výroba ČR",
+  tabStore:"Obchod",storeHdr:"Obchod s kartami",storeLoad:"Načíst nabídku",storeAdd:"Přidat",storeUpd:"Nahrát znovu",
+  storeHave:"nainstalováno",storeWait:"Stahuji nabídku a ověřuji podpis…",storeOk:"Podpis nabídky souhlasí, karet",storeErr:"Nabídku se nepodařilo načíst",
+  storeIntro:"Nabídka karet připravených k přidání jedním klepnutím. Zařízení si seznam stáhne samo a přijme ho jen tehdy, když jeho podpis souhlasí s klíčem ve firmwaru. Přidaná karta se objeví na záložce Obrazovky mezi ostatními.",
+  storeHint:"Podpis říká, že nabídku zveřejnil držitel klíče, ne že kartu někdo prověřil. Karta dál jen stahuje jednu adresu a ukazuje hodnoty — u každé vidíte, kam se bude zařízení ptát. Je-li nastavené heslo správce, vyplňte ho nejdřív na záložce Systém.",
   scrCards:"Karty",cardsHdr:"Karty",cardAdd:"Přidat kartu ze souboru",cardDel:"Odebrat",
   cardsNone:"Zatím žádná karta.",cardBad:"Soubor není platný JSON",cardErr:"bez dat",cardWait:"čeká",
   cardsIntro:"Karta je malý soubor JSON, který říká, odkud se má stáhnout hodnota a jak ji ukázat — třeba kurzy ČNB. Neobsahuje žádný kód. Každá karta je samostatná obrazovka a střídá se s ostatními ve stejném intervalu.",
@@ -520,6 +536,10 @@ const D={
   icBalloon:"balony a vzducholodě",icDrone:"drony",icGeneric:"nezjištěný typ",icNoTrack:"neznámý směr letu",},
  en:{tabCtl:"Control",tabLoc:"Location",tabScr:"Screens",tabLook:"Appearance",tabPlanes:"Aircraft",tabEnergy:"Energy",tabSys:"System",
   scrPrice:"Electricity price",scrMix:"Czech generation",
+  tabStore:"Store",storeHdr:"Card store",storeLoad:"Load the offer",storeAdd:"Add",storeUpd:"Install again",
+  storeHave:"installed",storeWait:"Downloading the offer and checking its signature…",storeOk:"The signature of the offer matches, cards",storeErr:"The offer could not be loaded",
+  storeIntro:"Cards ready to be added with one tap. The device downloads the list itself and accepts it only if its signature matches the key in the firmware. An added card shows up on the Screens tab with the others.",
+  storeHint:"The signature says the offer was published by the holder of the key, not that anyone reviewed a card. A card still only fetches one address and shows values - each entry says where the device will ask. If an admin password is set, fill it in on the System tab first.",
   scrCards:"Cards",cardsHdr:"Cards",cardAdd:"Add a card from a file",cardDel:"Remove",
   cardsNone:"No card yet.",cardBad:"The file is not valid JSON",cardErr:"no data",cardWait:"waiting",
   cardsIntro:"A card is a small JSON file that says where to fetch a value and how to show it - the CNB exchange rates, for example. It contains no code. Every card is a screen of its own and takes its turn with the others at the same interval.",
@@ -625,7 +645,7 @@ function showTab(id){
  TAB=id;
  document.querySelectorAll("section.tab").forEach(s=>s.classList.toggle("hide",s.id!=id));
  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab==id));
- $("saveBar").classList.toggle("hide",id=="tCtl");
+ $("saveBar").classList.toggle("hide",id=="tCtl"||id=="tStore");
  window.scrollTo(0,0);
 }
 document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
@@ -977,6 +997,21 @@ async function cardInstall(el){
  await cardPost("/api/cards",{card:j});
 }
 function cardDel(id){cardPost("/api/cards/delete",{id:id});}
+// Card store. The device fetches the index and checks its signature; this only
+// shows what the device accepted. Titles and descriptions come from the index,
+// so they are escaped; an id is restricted by the device to a-z, 0-9 and "-".
+async function storeLoad(){
+ $("storeState").textContent=D[L].storeWait;$("storeTab").innerHTML="";
+ let s=null,ok=false;
+ try{const r=await fetch("/api/store");ok=r.ok;s=await r.json()}catch(e){}
+ if(!ok||!s||!s.cards){$("storeState").textContent=D[L].storeErr+(s&&s.error?": "+s.error:"");return;}
+ $("storeState").textContent=D[L].storeOk+": "+s.cards.length;
+ $("storeTab").innerHTML=s.cards.map(k=>"<tr><td><b>"+escHtml(k.title)+"</b><br><small>"+
+  escHtml((k.desc&&(k.desc[L]||k.desc.en||k.desc.cs))||"")+"<br>"+k.id+" · "+escHtml(k.host||"")+"</small></td><td>"+
+  (k.installed?D[L].storeHave+"<br>":"")+"<button class='sec' onclick='storeInstall(\""+k.id+"\")'>"+
+  (k.installed?D[L].storeUpd:D[L].storeAdd)+"</button></td></tr>").join("");
+}
+async function storeInstall(id){await cardPost("/api/store/install",{id:id});storeLoad();}
 async function doReboot(){await fetch("/api/reboot",{method:"POST"});msg("…");}
 async function doReset(){
  if(!confirm(D[L].confirmReset))return;

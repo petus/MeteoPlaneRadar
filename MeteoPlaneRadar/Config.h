@@ -739,3 +739,14 @@
 #define CARD_REFRESH_MIN   5         // minutes; a card may not ask for less
 #define CARD_REFRESH_DEF   60
 #define CARD_RETRY_MS      120000UL  // after a failed fetch
+
+// ---------------------------------------------------------------------------
+//  Card store (0.9.0) - see Store.h
+//
+//  Where the signed index lives. The card files sit next to it. "HEAD" is the
+//  default branch of the repository, whatever it is called. To use another
+//  store, change the address here and the public key in StoreKey.h.
+// ---------------------------------------------------------------------------
+#define STORE_INDEX_URL    "https://raw.githubusercontent.com/petus/MeteoPlaneRadar/HEAD/cards/index.json"
+#define STORE_INDEX_MAX    (32 * 1024)   // bytes of index.json the device accepts
+#define STORE_CACHE_MS     120000UL      // a verified index is reused this long

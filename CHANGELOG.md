@@ -25,6 +25,14 @@ pohromadě v `MeteoPlaneRadar/Config.h`.
 
   Obrazovka je ve výchozím stavu vypnutá a vypnutá nic nestahuje.
 
+- **Obchod s kartami.** Nová záložka Obchod na webu nabídne karty, které jde
+  přidat jedním klepnutím. Zařízení si stáhne seznam `cards/index.json`,
+  ověří jeho podpis (ECDSA P-256) proti klíči ve firmwaru a každou kartu
+  porovná s otiskem SHA-256 ze seznamu. Nepodepsaný, změněný nebo starší
+  seznam odmítne. Ruční nahrání karty funguje dál a podpis nepotřebuje.
+  Seznam vyrábí a podepisuje `tools/make_index.py`. Popis:
+  [cards/README.md](cards/README.md#obchod-s-kartami).
+
 ### Změněno
 
 - Karty se ukládají do LittleFS v oddílu `spiffs`, který v `partitions.csv`
@@ -35,6 +43,9 @@ pohromadě v `MeteoPlaneRadar/Config.h`.
 - `/api/config` a export nastavení mají v `screens` nový klíč `cards`,
   `/api/status` nový řádek `cards`, `/api/ha` může v `screen` vrátit `cards`.
   Nové jsou `/api/cards` (GET, POST) a `/api/cards/delete` (POST).
+- Obchod přidává `/api/store` (GET) a `/api/store/install` (POST, s heslem
+  správce, je-li nastavené). Firmware je s ním o 11 kB větší; ověřování dělá
+  mbedTLS, které je v jádře ESP32 kvůli TLS, žádná knihovna nepřibyla.
 - **Tečky obrazovek nahoře jdou vypnout a ve výchozím stavu jsou skryté.**
   Každá karta je samostatná obrazovka a má svou tečku, takže s několika
   kartami byla řada dlouhá a málo říkala. Zapíná se na webu na záložce

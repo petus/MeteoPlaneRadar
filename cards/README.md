@@ -129,7 +129,57 @@ ořízne na hranici znaku.
   se vynechá — pište raději `EUR`.
 - Dokud je obrazovka Karty vypnutá, zařízení kvůli kartám nic nestahuje.
 
+## Obchod s kartami
+
+Karty z této složky jde přidat i bez stahování souboru: na webu zařízení,
+záložka **Obchod**, tlačítko **Načíst nabídku** a u vybrané karty **Přidat**.
+
+Jak to funguje:
+
+1. Zařízení si samo stáhne seznam [`index.json`](index.json) a jeho podpis
+   [`index.json.sig`](index.json.sig). Adresu má ve firmwaru
+   (`STORE_INDEX_URL` v `Config.h`).
+2. Podpis ověří proti veřejnému klíči ve firmwaru (`StoreKey.h`). Seznam,
+   jehož podpis nesouhlasí, nepřijme a nic z něj nenabídne.
+3. Při přidání stáhne soubor karty a porovná ho s otiskem SHA-256, který pro
+   něj uvádí seznam. Teprve pak projde karta stejnou kontrolou jako karta
+   nahraná ručně.
+
+K čemu podpis je: firmware při HTTPS neověřuje certifikáty, takže bez podpisu
+by nabídku mohl podvrhnout kdokoli na cestě. K čemu není: neříká, že kartu
+někdo prověřil — jen že seznam zveřejnil držitel klíče. Karta je pořád jen
+popis, žádný program.
+
+Seznam má pořadové číslo. Zařízení si pamatuje nejvyšší, které přijalo,
+a starší seznam odmítne, takže stažená karta nejde vrátit zpět podstrčením
+staré, správně podepsané nabídky.
+
+Po změně nabídky může GitHub ještě pár minut vracet starší verzi některého
+souboru. Zařízení pak nabídku nebo kartu odmítne; stačí to za chvíli zkusit
+znovu.
+
+### Správa nabídky
+
+Seznam a podpis vyrábí `tools/make_index.py`:
+
+```
+python3 tools/make_index.py            # po přidání nebo změně karty
+python3 tools/make_index.py --check    # jen ověří, že seznam a podpis sedí
+```
+
+Nástroj projde `cards/*.json`, zkontroluje je, spočítá otisky, zvýší pořadové
+číslo a seznam podepíše soukromým klíčem. Ten se hledá v `--key`, v proměnné
+`MPR_STORE_KEY` a v `~/.config/meteoplaneradar/store-signing-key.pem`; do
+repozitáře nepatří. Popisky karet v nabídce jsou v
+[`store-meta.json`](store-meta.json).
+
+Vlastní obchod: vytvořte si pár klíčů
+(`openssl ecparam -name prime256v1 -genkey -noout -out klic.pem`), veřejný
+klíč (`openssl ec -in klic.pem -pubout`) dejte do `StoreKey.h`, v `Config.h`
+změňte `STORE_INDEX_URL` na adresu svého seznamu a firmware přeložte.
+
 ## Přidání vlastní karty do repozitáře
 
-Pošlete pull request se souborem `cards/<id>.json`. Karta by měla používat
+Pošlete pull request se souborem `cards/<id>.json` a popiskem v
+`cards/store-meta.json`. Seznam obchodu podepisuje správce repozitáře. Karta by měla používat
 zdroj, který je veřejný, bez klíče a jehož podmínky takové použití dovolují.

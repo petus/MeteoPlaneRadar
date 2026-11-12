@@ -19,6 +19,7 @@
 #include "Energy.h"
 #include "Cards.h"
 #include "ScreenCards.h"
+#include "Store.h"
 #include "NightMode.h"
 #include "UI.h"
 #include "Display_ST7701.h"
@@ -590,6 +591,36 @@ static void handleCardsDelete() {
   s_srv.send(200, "application/json", "{\"ok\":true}");
 }
 
+// --- Card store (Store.h) -----------------------------------------------------
+// Listing is public like the list of installed cards. It makes the DEVICE fetch
+// the index and check its signature - the browser only sees the result, so a
+// page cannot be shown an offer the device itself would refuse.
+static void handleStoreList() {
+  JsonDocument out;
+  char err[80] = "";
+  if (!Store_List(out, err, sizeof(err))) {
+    JsonDocument e;
+    e["error"] = err;
+    sendJson(502, e);
+    return;
+  }
+  sendJson(200, out);
+}
+
+static void handleStoreInstall() {
+  JsonDocument doc;
+  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
+  if (!authed(doc)) return;
+  char err[80] = "";
+  if (!Store_Install(doc["id"] | "", err, sizeof(err))) {
+    JsonDocument out;
+    out["error"] = err;
+    sendJson(400, out);
+    return;
+  }
+  s_srv.send(200, "application/json", "{\"ok\":true}");
+}
+
 static void handleReboot() {
   s_srv.send(200, "application/json", "{\"ok\":true}");
   delay(200);
@@ -832,6 +863,8 @@ void WebConfig_Begin(bool apMode) {
   s_srv.on("/api/cards", HTTP_GET, handleCardsList);
   s_srv.on("/api/cards", HTTP_POST, handleCardsInstall);
   s_srv.on("/api/cards/delete", HTTP_POST, handleCardsDelete);
+  s_srv.on("/api/store", HTTP_GET, handleStoreList);
+  s_srv.on("/api/store/install", HTTP_POST, handleStoreInstall);
   s_srv.on("/api/reboot", HTTP_POST, handleReboot);
   s_srv.on("/api/reset", HTTP_POST, handleReset);
   // The update page authenticates with HTTP Basic when a password is set. See
