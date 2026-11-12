@@ -93,8 +93,12 @@ int main(int argc, char** argv) {
   CHECK(list(d, &why));
   printf("genuine index: %s, serial %ld, %zu card(s)\n", why.empty() ? "accepted" : why.c_str(),
          (long)(d["serial"] | 0L), d["cards"].size());
-  // the offer is sorted by id: den, kurzy-cnb, kurzy-listek, svatek
-  CHECK(d["cards"].size() == 4);
+  // the offer is every card of the index, sorted by id (den, kurzy-cnb, ...)
+  JsonDocument idxDoc;
+  deserializeJson(idxDoc, slurp(fx + "/index.json"));
+  const size_t nIdx = idxDoc["cards"].size();
+  CHECK(nIdx >= 2);
+  CHECK(d["cards"].size() == nIdx);
   CHECK(std::string(d["cards"][1]["id"] | "") == "kurzy-cnb");
   CHECK((d["cards"][1]["installed"] | true) == false);
   CHECK(std::string(d["cards"][1]["desc"]["en"] | "").size() > 10);
@@ -165,8 +169,8 @@ int main(int argc, char** argv) {
     serve("index-evil.json", "index-evil.json.sig");
     s_web[BASE + "../../../secret.json"] = "{}";
     CHECK(list(d, &why));
-    printf("signed index with a bad entry: %zu of 4 entries offered\n", d["cards"].size());
-    CHECK(d["cards"].size() == 3);                      // the bad entry is not offered
+    printf("signed index with a bad entry: %zu of %zu entries offered\n", d["cards"].size(), nIdx);
+    CHECK(d["cards"].size() == nIdx - 1);               // the bad entry is not offered
     CHECK(!install("svatek", &why));                    // ...and cannot be installed
     CHECK(why == "no such card in the store");
   } else {
