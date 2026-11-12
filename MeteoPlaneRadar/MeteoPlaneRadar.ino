@@ -98,6 +98,8 @@
 #include "ScreenForecast.h"
 #include "ScreenPrice.h"
 #include "ScreenMix.h"
+#include "Cards.h"
+#include "ScreenCards.h"
 #include "ScreenSettings.h"
 #include "Forecast.h"
 #include "Energy.h"
@@ -298,19 +300,37 @@ static int visibleList(int* out) {
   return n;
 }
 
+// One dot per place in the stepping. Every screen has one place except the
+// cards screen, which has one per installed card - to the user each card is a
+// screen of its own (ScreenCards.h). The row can be switched off in the web UI
+// and is off by default: with several cards it is long and tells little.
 static void drawScreenDots() {
+  if (!Settings_ScreenDots()) return;
   int vis[SCREEN_N];
-  const int n = visibleList(vis);
+  const int nVis = visibleList(vis);
+  int n = 0;
+  for (int i = 0; i < nVis; i++) n += (vis[i] == SCREEN_CARDS_I) ? ScreenCards_Count() : 1;
   if (n <= 1) return;                    // one screen - a single dot says nothing
 
-  const int gap = 20;
+  // The row sits near the rim, where the round panel is narrow: about 160 px
+  // across. Eight dots fit at the usual spacing; more are drawn closer and
+  // smaller rather than run off the glass.
+  const int room = 160;
+  int gap = 20, r = 4;
+  if ((n - 1) * gap > room) { gap = room / (n - 1); r = (gap >= 9) ? 3 : 2; }
   const int cx = LCD_WIDTH / 2;
   const int y = LY_DOTS;
   const int startX = cx - (n - 1) * gap / 2;
-  for (int i = 0; i < n; i++) {
-    int x = startX + i * gap;
-    if (vis[i] == s_screen) gfx->fillCircle(x, y, 4, C_WHITE);
-    else                    gfx->drawCircle(x, y, 4, C_GRAY);
+  int k = 0;
+  for (int i = 0; i < nVis; i++) {
+    const bool cards = (vis[i] == SCREEN_CARDS_I);
+    const int places = cards ? ScreenCards_Count() : 1;
+    for (int j = 0; j < places; j++, k++) {
+      const int x = startX + k * gap;
+      const bool on = (vis[i] == s_screen) && (!cards || j == ScreenCards_Index());
+      if (on) gfx->fillCircle(x, y, r, C_WHITE);
+      else    gfx->drawCircle(x, y, r, C_GRAY);
+    }
   }
 }
 
@@ -322,6 +342,7 @@ static void drawActive() {
     case SCREEN_FORECAST_I: ScreenForecast_Draw(); break;
     case SCREEN_PRICE_I:    ScreenPrice_Draw();    break;
     case SCREEN_MIX_I:      ScreenMix_Draw();      break;
+    case SCREEN_CARDS_I:    ScreenCards_Draw();    break;
     case SCREEN_SETTINGS_I: ScreenSettings_Draw(); break;
   }
   drawScreenDots();
@@ -336,6 +357,7 @@ static void enterActive() {
     case SCREEN_FORECAST_I: ScreenForecast_Enter(); break;
     case SCREEN_PRICE_I:    ScreenPrice_Enter();    break;
     case SCREEN_MIX_I:      ScreenMix_Enter();      break;
+    case SCREEN_CARDS_I:    ScreenCards_Enter();    break;
     case SCREEN_SETTINGS_I: ScreenSettings_Enter(); break;
   }
   drawActive();
@@ -343,13 +365,34 @@ static void enterActive() {
 
 // dir -1 = previous, +1 = next. Walks over disabled screens; the guard stops it
 // looping forever if somehow nothing is enabled at all.
+// On the cards screen a step goes to the neighbouring card first; only past
+// the last (or the first) one does it leave for another screen. That is what
+// makes every card a screen of its own in the stepping and in the cycling.
+static bool stepWithinCards(int dir) {
+  if (s_screen != SCREEN_CARDS_I || !ScreenCards_Step(dir)) return false;
+  Serial.printf("Screen: %d, karta %d\n", s_screen, ScreenCards_Index() + 1);
+  drawActive();
+  return true;
+}
+
 static void switchScreen(int dir) {
+  if (stepWithinCards(dir)) return;
   int next = s_screen;
   for (int guard = 0; guard < SCREEN_N; guard++) {
     next = (next + dir + SCREEN_N) % SCREEN_N;
     if (screenVisible(next)) break;
   }
-  if (next == s_screen) return;
+  if (next == s_screen) {
+    // The cards screen is the only one there is: go round its cards.
+    if (s_screen == SCREEN_CARDS_I && ScreenCards_Count() > 1) {
+      ScreenCards_Select(dir > 0 ? 0 : -1);
+      drawActive();
+    }
+    return;
+  }
+  // Coming from the screen before, start at the first card; coming back from
+  // the screen after, at the last.
+  if (next == SCREEN_CARDS_I) ScreenCards_Select(dir > 0 ? 0 : -1);
   s_screen = next;
   Settings_SetScreen((uint8_t)s_screen);
   Serial.printf("Screen: %d\n", s_screen);
@@ -376,6 +419,7 @@ static bool activeTick() {
     case SCREEN_FORECAST_I: return ScreenForecast_Tick();
     case SCREEN_PRICE_I:    return ScreenPrice_Tick();
     case SCREEN_MIX_I:      return ScreenMix_Tick();
+    case SCREEN_CARDS_I:    return ScreenCards_Tick();
     case SCREEN_SETTINGS_I: return ScreenSettings_Tick();
   }
   return false;
@@ -389,6 +433,8 @@ static void activeChangeRange(int dir) {
     // same thing it means everywhere else - show me the other one - so it is
     // wired to the same gesture rather than inventing a second one.
     case SCREEN_PRICE_I:  ScreenPrice_ChangeRange(dir);   break;
+    // And on the cards screen it steps to the next installed card.
+    case SCREEN_CARDS_I:  ScreenCards_ChangeRange(dir);   break;
     default: break;   // the other screens have no range
   }
 }
@@ -489,6 +535,10 @@ static void autoRotateTick() {
   if (now - s_lastRotate < (unsigned long)secs * 1000UL) return;
   s_lastRotate = now;
 
+  // Every card gets the same interval as any other screen: on the cards
+  // screen the next stop is the next card, until they have all been shown.
+  if (stepWithinCards(+1)) return;
+
   // Step to the next screen that takes part in the cycling.
   int next = s_screen;
   bool found = false;
@@ -496,7 +546,15 @@ static void autoRotateTick() {
     next = (next + 1) % SCREEN_N;
     if (inRotation(next)) { found = true; break; }
   }
-  if (!found || next == s_screen) return;
+  if (!found || next == s_screen) {
+    // Nothing else is in the cycling: go round the cards.
+    if (s_screen == SCREEN_CARDS_I && ScreenCards_Count() > 1) {
+      ScreenCards_Select(0);
+      drawActive();
+    }
+    return;
+  }
+  if (next == SCREEN_CARDS_I) ScreenCards_Select(0);
   s_screen = next;
   enterActive();
 }
@@ -575,6 +633,10 @@ void setup() {
   Serial.printf("Volna pamet: %u B\n", (unsigned)ESP.getFreeHeap());
 
   Settings_Begin();          // also sets the interface language
+  // Before the panel is started: the first boot after this feature arrived
+  // formats the (so far unused) filesystem partition, and a flash write is
+  // best done while there is no frame on the glass to disturb.
+  Cards_Begin();
   CHMU_SetMasked(Settings_RadarSource() == RADAR_SRC_CHMU_MASKED);
   TimeZone_Begin();      // compiled-in default; the forecast may correct it
   Layout_SelfTest();         // no-op unless LAYOUT_DEBUG is on
@@ -807,6 +869,10 @@ void loop() {
   // Redrawing is decoupled from reading the touch and capped at ~12 FPS.
   static unsigned long lastDraw = 0;
   bool wantDraw = activeTick();
+  // The dots switch in the web UI takes effect at once, not at the next redraw
+  // a quiet screen (a card that refreshes hourly) would get round to.
+  static bool dotsShown = Settings_ScreenDots();
+  if (dotsShown != Settings_ScreenDots()) { dotsShown = Settings_ScreenDots(); wantDraw = true; }
   if (wantDraw && millis() - lastDraw >= 80) {
     drawActive();
     lastDraw = millis();
@@ -827,6 +893,7 @@ void loop() {
   Outside_Tick();     // outside temperature and the clock safety net
   Forecast_Tick();    // forecast, sun times and air quality
   Energy_Tick();      // spot price and generation mix (only if those screens are on)
+  Cards_Tick();       // user-installed JSON cards (only if that screen is on)
   StormWatch_Tick();  // newest radar frame near us (only when something wants it)
   PlaneWatch_Tick(s_screen == SCREEN_PLANES_I);   // small poll for the alert / HA
   NightMode_Tick();   // day/night brightness

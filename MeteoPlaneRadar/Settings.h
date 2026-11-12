@@ -125,6 +125,11 @@ void     Settings_SetHaEnabled(bool on);
 // heart and would rather see the map underneath it.
 bool    Settings_MeteoLegend();
 void    Settings_SetMeteoLegend(bool on);
+// The row of dots at the top, one per screen and one per card. Off by default:
+// every card is a screen of its own, so with a few cards the row is long and
+// says little. The screens keep the band free either way.
+bool    Settings_ScreenDots();
+void    Settings_SetScreenDots(bool on);
 
 // --- Energy -----------------------------------------------------------------
 //

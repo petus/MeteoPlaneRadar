@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "id": "svatek",
+  "title": "Svátek",
+  "url": "https://nameday.abalin.net/api/V2/today?timezone=Europe/Prague",
+  "refresh_min": 60,
+  "rows": [
+    { "label": "dnes má svátek", "path": "data.cz" }
+  ]
+}

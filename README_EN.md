@@ -63,9 +63,10 @@ It is not a phone and does not try to be one.
 | **Forecast** | now, two 3-hour windows, today and six more days, air quality and pollen | Open-Meteo |
 | **Electricity price** | spot price on a quarter-hour dial, today and tomorrow | OTE via spotovaelektrina.cz |
 | **Generation** | what the grid is running on, renewable share, load, export | Energy-Charts (Fraunhofer ISE) |
+| **Cards** | your own values from any JSON API, e.g. CNB exchange rates | set by the card, see [cards](cards/README.md) |
 | **Settings** | brightness, map orientation, units, language | — |
 
-Any of the first six can be switched off in the browser; Settings is always
+Any of the first seven can be switched off in the browser; Settings is always
 reachable.
 
 Both energy screens are **off after an update** — turn them on in the browser.
@@ -356,6 +357,18 @@ the storm watch (active, strongest echo, distance), the nearest aircraft
 aircraft count, the electricity price and the renewable share. It is
 read-only and needs no password. While it is on, the storm watch (one CHMI
 frame per 5 minutes) and a small aircraft poll (every 30 s) run too.
+
+## Cards
+
+The **Cards** screen shows values you add yourself. A card is a small JSON
+file that says where to fetch a value and what to call it; it contains no
+code. Cards are uploaded in the browser (Screens tab) and stored in flash, so
+they survive a restart and a firmware update. A sample card with the Czech
+National Bank exchange rates and the format description (in Czech) are in
+[cards](cards/README.md).
+
+The screen is off after an update, and while it is off the device fetches
+nothing for it.
 
 ## For developers
 

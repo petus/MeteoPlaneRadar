@@ -71,3 +71,7 @@ const RouteInfo* Route_Get();   // platne, dokud je stav ROUTE_OK
 // tohohle by na odpoved cekala az na dalsi stahovani letadel - tedy podle
 // dosahu 5 az 15 sekund, i kdyz trasa dorazila hned.
 bool       Route_TakeChanged();
+
+// Folds UTF-8 text down to what the built-in 7-bit font can draw: accents are
+// dropped, the letter under them stays ("Kč" -> "Kc"). cap includes the NUL.
+void Route_ToAscii(char* dst, size_t cap, const char* src);

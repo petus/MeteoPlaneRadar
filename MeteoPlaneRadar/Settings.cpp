@@ -48,6 +48,7 @@ static uint8_t s_scrMask = (1 << SCREEN_CLOCK_I) | (1 << SCREEN_PLANES_I) |
 static uint16_t s_autoRot = 0;
 static uint8_t s_radarSrc = RADAR_SRC_CHMU;
 static bool    s_mtLegend = true;
+static bool    s_scrDots = false;
 
 // --- Energy ---
 static uint16_t s_priceFee = 0;     // CZK/MWh on top of the spot price
@@ -139,6 +140,7 @@ void Settings_Begin() {
     }
     s_radarSrc = prefs.getUChar("radSrc", RADAR_SRC_CHMU);
     s_mtLegend = prefs.getBool("mtLeg", true);
+    s_scrDots = prefs.getBool("dots", false);
     s_priceFee = prefs.getUShort("priceFee", 0);
     s_priceVat = prefs.getUChar("priceVat", 0);
     if (prefs.getString("mixCC", s_mixCC, sizeof(s_mixCC)) == 0)
@@ -405,6 +407,9 @@ void Settings_SetHaEnabled(bool on) { s_haOn = on; putBool("haOn", on); }
 bool Settings_MeteoLegend() { return s_mtLegend; }
 void Settings_SetMeteoLegend(bool on) { s_mtLegend = on; putBool("mtLeg", on); }
 
+bool Settings_ScreenDots() { return s_scrDots; }
+void Settings_SetScreenDots(bool on) { s_scrDots = on; putBool("dots", on); }
+
 // --- Energy -----------------------------------------------------------------
 uint16_t Settings_PriceFee() { return s_priceFee; }
 void     Settings_SetPriceFee(uint16_t czkPerMwh) {
@@ -553,6 +558,7 @@ void Settings_ToJson(JsonObject o) {
   o["nightOffset"] = s_nightOff;
   o["radarSrc"] = s_radarSrc;
   o["meteoLegend"] = s_mtLegend;
+  o["screenDots"] = s_scrDots;
   o["priceFee"] = s_priceFee;
   o["priceVat"] = s_priceVat;
   o["mixCountry"] = s_mixCC;
@@ -592,6 +598,7 @@ void Settings_ToJson(JsonObject o) {
   scr["forecast"] = Settings_ScreenEnabled(SCREEN_FORECAST_I);
   scr["price"]    = Settings_ScreenEnabled(SCREEN_PRICE_I);
   scr["mix"]      = Settings_ScreenEnabled(SCREEN_MIX_I);
+  scr["cards"]    = Settings_ScreenEnabled(SCREEN_CARDS_I);
 }
 
 bool Settings_FromJson(JsonObjectConst in) {
@@ -618,6 +625,7 @@ bool Settings_FromJson(JsonObjectConst in) {
   setIf("nightOffset",  [](JsonVariantConst v){ Settings_SetNightOffsetMin(v.as<int8_t>()); });
   setIf("radarSrc",     [](JsonVariantConst v){ Settings_SetRadarSource(v.as<uint8_t>()); });
   setIf("meteoLegend",  [](JsonVariantConst v){ Settings_SetMeteoLegend(v.as<bool>()); });
+  setIf("screenDots",   [](JsonVariantConst v){ Settings_SetScreenDots(v.as<bool>()); });
   setIf("priceFee",     [](JsonVariantConst v){ Settings_SetPriceFee(v.as<uint16_t>()); });
   setIf("priceVat",     [](JsonVariantConst v){ Settings_SetPriceVat(v.as<uint8_t>()); });
   setIf("mixCountry",   [](JsonVariantConst v){ Settings_SetMixCountry(v.as<const char*>()); });
@@ -674,6 +682,7 @@ bool Settings_FromJson(JsonObjectConst in) {
       { "forecast", SCREEN_FORECAST_I },
       { "price",    SCREEN_PRICE_I },
       { "mix",      SCREEN_MIX_I },
+      { "cards",    SCREEN_CARDS_I },
     };
     for (auto& m : M) {
       JsonVariantConst v = scr[m.key];
@@ -706,7 +715,7 @@ void Settings_ClearAll() {
   s_metric = false; s_lang = LANG_CZ; Lang_Set(s_lang);
   s_scrMask = (1 << SCREEN_CLOCK_I) | (1 << SCREEN_PLANES_I) |
               (1 << SCREEN_METEO_I) | (1 << SCREEN_FORECAST_I);
-  s_autoRot = 0; s_radarSrc = RADAR_SRC_CHMU; s_mtLegend = true;
+  s_autoRot = 0; s_radarSrc = RADAR_SRC_CHMU; s_mtLegend = true; s_scrDots = false;
   s_priceFee = 0; s_priceVat = 0;
   strncpy(s_mixCC, MIX_COUNTRY_DEFAULT, sizeof(s_mixCC) - 1);
   s_secStyle = SEC_STYLE_DOTS; s_clockCol = 0xFFFF; s_secCol = 0x05FF;

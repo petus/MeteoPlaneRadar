@@ -17,6 +17,8 @@
 #include "Net.h"
 #include "Forecast.h"
 #include "Energy.h"
+#include "Cards.h"
+#include "ScreenCards.h"
 #include "NightMode.h"
 #include "UI.h"
 #include "Display_ST7701.h"
@@ -300,6 +302,7 @@ static void handleStatus() {
   // the remote control can step through, so it answers here too and the -/+
   // buttons stay live instead of greying out.
   else if (scr == SCREEN_PRICE_I)  ScreenPrice_RangeText(rb, sizeof(rb));
+  else if (scr == SCREEN_CARDS_I)  ScreenCards_RangeText(rb, sizeof(rb));
   doc["range"] = rb;                       // empty on screens without one
 
   JsonArray en = doc["enabled"].to<JsonArray>();
@@ -311,6 +314,7 @@ static void handleStatus() {
   Status_Text(ST_FORECAST, b, sizeof(b)); doc["forecast"] = b;
   Status_Text(ST_PRICE, b, sizeof(b));    doc["price"] = b;
   Status_Text(ST_MIX, b, sizeof(b));      doc["mix"] = b;
+  Status_Text(ST_CARDS, b, sizeof(b));    doc["cards"] = b;
   Status_Text(ST_STORM, b, sizeof(b));    doc["storm"] = b;
   Status_Text(ST_PLANEWATCH, b, sizeof(b)); doc["planeWatch"] = b;
   sendJson(200, doc);
@@ -342,7 +346,7 @@ static void handleWifiList() {
 // Home Assistant: the shape follows the documented REST sensor, but nobody has
 // pointed one at it yet.
 static const char* const SCREEN_KEYS[SCREEN_N] = {
-  "clock", "planes", "meteo", "forecast", "price", "mix", "settings" };
+  "clock", "planes", "meteo", "forecast", "price", "mix", "cards", "settings" };
 
 static void handleHa() {
   if (!Settings_HaEnabled()) {
@@ -538,6 +542,52 @@ static void handleImport() {
   s_wantRestart = true;
   JsonDocument res; res["ok"] = true;
   sendJson(200, res);
+}
+
+// --- JSON cards (Cards.h) ----------------------------------------------------
+// The list is public like the rest of the status. Installing and removing go
+// through authed(): a card makes the device fetch a URL of the author's
+// choosing, so on a device with an admin password it takes the password.
+static void handleCardsList() {
+  JsonDocument doc;
+  doc["ready"] = Cards_FsReady();
+  doc["max"] = CARDS_MAX;
+  JsonArray a = doc["cards"].to<JsonArray>();
+  for (int i = 0; i < Cards_Count(); i++) {
+    const Card* c = Cards_Get(i);
+    JsonObject o = a.add<JsonObject>();
+    o["id"] = c->id;
+    o["title"] = c->title;
+    o["url"] = c->url;
+    o["ok"] = c->valid && !c->stale;
+    o["tried"] = c->everTried;
+  }
+  sendJson(200, doc);
+}
+
+static void handleCardsInstall() {
+  JsonDocument doc;
+  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
+  if (!authed(doc)) return;
+  char err[80] = "";
+  if (!Cards_Install(doc["card"].as<JsonObjectConst>(), err, sizeof(err))) {
+    JsonDocument out;
+    out["error"] = err;
+    sendJson(400, out);
+    return;
+  }
+  s_srv.send(200, "application/json", "{\"ok\":true}");
+}
+
+static void handleCardsDelete() {
+  JsonDocument doc;
+  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
+  if (!authed(doc)) return;
+  if (!Cards_Remove(doc["id"] | "")) {
+    s_srv.send(404, "application/json", "{\"error\":\"not found\"}");
+    return;
+  }
+  s_srv.send(200, "application/json", "{\"ok\":true}");
 }
 
 static void handleReboot() {
@@ -779,6 +829,9 @@ void WebConfig_Begin(bool apMode) {
   s_srv.on("/api/geocode", HTTP_GET, handleGeocode);
   s_srv.on("/api/export", HTTP_GET, handleExport);
   s_srv.on("/api/import", HTTP_POST, handleImport);
+  s_srv.on("/api/cards", HTTP_GET, handleCardsList);
+  s_srv.on("/api/cards", HTTP_POST, handleCardsInstall);
+  s_srv.on("/api/cards/delete", HTTP_POST, handleCardsDelete);
   s_srv.on("/api/reboot", HTTP_POST, handleReboot);
   s_srv.on("/api/reset", HTTP_POST, handleReset);
   // The update page authenticates with HTTP Basic when a password is set. See

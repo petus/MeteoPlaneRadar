@@ -21,6 +21,7 @@ enum StatusSlot : uint8_t {
   ST_MIX,          // generation mix
   ST_STORM,        // storm watch (0.8.0)
   ST_PLANEWATCH,   // aircraft-nearby watch (0.8.0)
+  ST_CARDS,        // JSON cards (0.9.0) - the most recent fetch
   ST_COUNT
 };
 

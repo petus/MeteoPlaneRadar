@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "id": "kurzy-cnb",
+  "title": "Kurzy ČNB",
+  "url": "https://api.cnb.cz/cnbapi/exrates/daily?lang=EN",
+  "refresh_min": 60,
+  "rows": [
+    { "label": "1 EUR", "path": "rates[currencyCode=EUR].rate", "decimals": 3, "unit": "Kč" },
+    { "label": "1 USD", "path": "rates[currencyCode=USD].rate", "decimals": 3, "unit": "Kč" }
+  ],
+  "note": { "label": "ČNB", "path": "rates[0].validFor" }
+}

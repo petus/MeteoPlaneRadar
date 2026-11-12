@@ -51,6 +51,10 @@ static void toAscii(char* dst, size_t cap, const char* src) {
   dst[o] = '\0';
 }
 
+// Stejne skladani pro text, ktery neprisel z adsb.lol - nazvy a jednotky na
+// uzivatelskych kartach (ScreenCards).
+void Route_ToAscii(char* dst, size_t cap, const char* src) { toAscii(dst, cap, src); }
+
 // --- Cache ------------------------------------------------------------------
 // Klicem je callsign (hex uz se sem neposila). Round-robin nahrazovani: pri
 // tomhle poctu polozek stoji cokoli chytrejsiho vic, nez to usetri.

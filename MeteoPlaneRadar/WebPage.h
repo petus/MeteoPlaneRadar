@@ -163,12 +163,26 @@ td:first-child{color:var(--mut);width:50%}
       <label class="chk"><input type="checkbox" id="sForecast"><span data-i18n="scrForecast">Předpověď</span></label>
       <label class="chk"><input type="checkbox" id="sPrice"><span data-i18n="scrPrice">Cena elektřiny</span></label>
       <label class="chk"><input type="checkbox" id="sMix"><span data-i18n="scrMix">Výroba ČR</span></label>
+      <label class="chk"><input type="checkbox" id="sCards"><span data-i18n="scrCards">Karty</span></label>
     </div>
     <p class="hint" data-i18n="scrHint">Vypnuté obrazovky se přeskakují. Nastavení je dostupné vždy.</p>
     <p class="hint" data-i18n="restartHint">Změna obrazovek, zdroje radaru nebo polohy potřebuje restart, takže se ukládá až tlačítkem dole.</p>
     <div class="row"><label data-i18n="autoRotate">Automatické střídání (sekundy, 0 = vypnuto)</label>
       <input type="number" id="autoRotate" min="0" max="3600" step="5"></div>
     <p class="hint" data-i18n="rotHint">Střídání pozastaví přejetí prstem, dlouhý stisk nebo přepnutí z prohlížeče — na trojnásobek intervalu, pak pokračuje samo. Obyčejné klepnutí ho nezastaví, otevřený detail letadla ho drží. Na obrazovce Nastavení se nestřídá.</p>
+    <div class="row"><label class="chk"><input type="checkbox" id="screenDots"><span data-i18n="scrDots">Zobrazovat tečky obrazovek nahoře</span></label></div>
+    <p class="hint" data-i18n="scrDotsHint">Jedna tečka za každou obrazovku a za každou kartu. S více kartami je jich hodně, proto jsou ve výchozím stavu skryté.</p>
+  </div>
+
+  <div class="card">
+    <h2 data-i18n="cardsHdr">Karty</h2>
+    <p class="hint" data-i18n="cardsIntro"></p>
+    <table id="cardsTab"></table>
+    <div class="row" style="margin-top:12px">
+      <button class="sec" onclick="document.getElementById('cardFile').click()" data-i18n="cardAdd">Přidat kartu ze souboru</button>
+      <input type="file" id="cardFile" class="hide" accept="application/json,.json" onchange="cardInstall(this)">
+    </div>
+    <p class="hint" data-i18n="cardsHint"></p>
   </div>
 
   <div class="card">
@@ -413,6 +427,10 @@ td:first-child{color:var(--mut);width:50%}
 const D={
  cs:{tabCtl:"Ovládání",tabLoc:"Poloha",tabScr:"Obrazovky",tabLook:"Vzhled",tabPlanes:"Letadla",tabEnergy:"Energie",tabSys:"Systém",
   scrPrice:"Cena elektřiny",scrMix:"Výroba ČR",
+  scrCards:"Karty",cardsHdr:"Karty",cardAdd:"Přidat kartu ze souboru",cardDel:"Odebrat",
+  cardsNone:"Zatím žádná karta.",cardBad:"Soubor není platný JSON",cardErr:"bez dat",cardWait:"čeká",
+  cardsIntro:"Karta je malý soubor JSON, který říká, odkud se má stáhnout hodnota a jak ji ukázat — třeba kurzy ČNB. Neobsahuje žádný kód. Každá karta je samostatná obrazovka a střídá se s ostatními ve stejném intervalu.",
+  cardsHint:"Karta způsobí, že si zařízení pravidelně stahuje adresu, kterou v ní určil její autor — přidávejte jen karty, kterým rozumíte. Je-li nastavené heslo správce, vyplňte ho nejdřív na kartě Systém. Formát a ukázky jsou ve složce cards v repozitáři projektu.",
   energyPrice:"Cena elektřiny",energyMix:"Výroba ČR",
   mixCountry:"Země",
   mixCountryHint:"Rozhraní energy-charts pokrývá Evropu. Mimo ni obrazovka data nemá a sama se vypne.",
@@ -441,6 +459,8 @@ const D={
   rotHint:"Střídání pozastaví přejetí prstem, dlouhý stisk nebo přepnutí z prohlížeče — na trojnásobek intervalu, pak pokračuje samo. Obyčejné klepnutí ho nezastaví, otevřený detail letadla ho drží. Na obrazovce Nastavení se nestřídá.",
   radar:"Meteoradar",radarSrc:"Zdroj dat",srcChmu:"ČHMÚ (ostřejší, jen ČR)",srcRv:"RainViewer (Evropa i svět)",
   mtLegend:"Zobrazit legendu (dBZ / mm/h)",
+  scrDots:"Zobrazovat tečky obrazovek nahoře",
+  scrDotsHint:"Jedna tečka za každou obrazovku a za každou kartu. S více kartami je jich hodně, proto jsou ve výchozím stavu skryté.",
   mtLegendHint:"Legenda zabírá levý okraj mapy. Když stupnici znáte, dá se skrýt a je vidět víc území.",
   radarHint:"Mimo ČR nemá ČHMÚ data a obrazovka zůstane prázdná — použijte RainViewer.",
   brightness:"Jas",clockHdr:"Hodiny",
@@ -500,6 +520,10 @@ const D={
   icBalloon:"balony a vzducholodě",icDrone:"drony",icGeneric:"nezjištěný typ",icNoTrack:"neznámý směr letu",},
  en:{tabCtl:"Control",tabLoc:"Location",tabScr:"Screens",tabLook:"Appearance",tabPlanes:"Aircraft",tabEnergy:"Energy",tabSys:"System",
   scrPrice:"Electricity price",scrMix:"Czech generation",
+  scrCards:"Cards",cardsHdr:"Cards",cardAdd:"Add a card from a file",cardDel:"Remove",
+  cardsNone:"No card yet.",cardBad:"The file is not valid JSON",cardErr:"no data",cardWait:"waiting",
+  cardsIntro:"A card is a small JSON file that says where to fetch a value and how to show it - the CNB exchange rates, for example. It contains no code. Every card is a screen of its own and takes its turn with the others at the same interval.",
+  cardsHint:"A card makes the device fetch, at intervals, an address chosen by whoever wrote it - only add cards you understand. If an admin password is set, fill it in on the System tab first. The format and samples are in the cards folder of the project repository.",
   energyPrice:"Electricity price",energyMix:"Czech generation",
   mixCountry:"Country",
   mixCountryHint:"The energy-charts API covers Europe. Outside it the screen has no data and switches itself off.",
@@ -528,6 +552,8 @@ const D={
   rotHint:"Cycling is paused by a swipe, a long press or a switch from the browser - for three times the interval, then it resumes on its own. A plain tap does not stop it; an open aircraft detail holds it. It does not run on the Settings screen.",
   radar:"Weather radar",radarSrc:"Data source",srcChmu:"CHMU (sharper, Czechia only)",srcRv:"RainViewer (Europe and beyond)",
   mtLegend:"Show the legend (dBZ / mm/h)",
+  scrDots:"Show the screen dots at the top",
+  scrDotsHint:"One dot per screen and one per card. With several cards there are many of them, so they are hidden by default.",
   mtLegendHint:"The legend takes up the left edge of the map. If you know the scale, hide it and see more ground.",
   radarHint:"Outside Czechia CHMU has no data and the screen stays blank — use RainViewer.",
   brightness:"Brightness",clockHdr:"Clock",
@@ -611,7 +637,7 @@ function hexToRgb565(h){const r=parseInt(h.substr(1,2),16),g=parseInt(h.substr(3
  return ((r>>3)<<11)|((g>>2)<<5)|(b>>3);}
 
 const SCR=[["scrClock",0],["scrPlanes",1],["scrMeteo",2],["scrForecast",3],
-           ["scrPrice",4],["scrMix",5],["settings",6]];
+           ["scrPrice",4],["scrMix",5],["scrCards",6],["settings",7]];
 function drawScrBtns(cur,enabled){
  $("scrBtns").innerHTML=SCR.map(([k,i])=>{
   const on=enabled?enabled[i]:true;
@@ -664,6 +690,7 @@ const AUTO = [
  ["onlyCallsign","change","onlyCallsign",e=>e.checked],
  ["squawkAlert","change","squawkAlert",e=>e.checked],
  ["meteoLegend","change","meteoLegend",e=>e.checked],
+ ["screenDots","change","screenDots",e=>e.checked],
  ["watch","change","watch",e=>e.value],
  ["autoRotate","change","autoRotate",e=>+e.value],
  // The tariff fields change nothing but a multiplication, so they take effect
@@ -720,11 +747,13 @@ async function load(){
  $("sClock").checked=CFG.screens.clock;$("sPlanes").checked=CFG.screens.planes;
  $("sMeteo").checked=CFG.screens.meteo;$("sForecast").checked=CFG.screens.forecast;
  $("sPrice").checked=!!CFG.screens.price;$("sMix").checked=!!CFG.screens.mix;
+ $("sCards").checked=!!CFG.screens.cards;cardsLoad();
  $("priceFee").value=CFG.priceFee||0;$("priceVat").value=CFG.priceVat||0;
  $("mixCountry").value=CFG.mixCountry||"cz";
  feeHint();
  $("autoRotate").value=CFG.autoRotate;$("radarSrc").value=CFG.radarSrc;
  $("meteoLegend").checked=CFG.meteoLegend;
+ $("screenDots").checked=!!CFG.screenDots;
  $("briDay").value=CFG.briDay;$("briNight").value=CFG.briNight;
  $("nightAuto").checked=CFG.nightAuto;$("nightOffset").value=CFG.nightOffset;
  $("secStyle").value=CFG.secStyle;$("metric").checked=CFG.metric;$("topBearing").value=CFG.topBearing;
@@ -783,7 +812,7 @@ async function status(){
  const rows=[["IP",s.ip],["WiFi",s.ssid+" ("+s.rssi+" dBm)"],["Uptime",s.uptime],
   ["Heap",s.heap+" B"],["PSRAM",s.psram+" B"],["Restart",s.resetReason],
   ["ADS-B",s.adsb],["Radar",s.radar],[D[L].scrForecast,s.forecast],
-  [D[L].scrPrice,s.price],[D[L].scrMix,s.mix],
+  [D[L].scrPrice,s.price],[D[L].scrMix,s.mix],[D[L].scrCards,s.cards],
   [D[L].stormSt,s.storm],[D[L].planeWatchSt,s.planeWatch],
   [D[L].timezone,s.timezone],
   ["Firmware","v"+s.version],[D[L].board,s.board]];
@@ -796,6 +825,7 @@ function body(){return{lat:parseFloat($("lat").value),lon:parseFloat($("lon").va
  briDay:+$("briDay").value,briNight:+$("briNight").value,nightAuto:$("nightAuto").checked,
  nightOffset:+$("nightOffset").value,radarSrc:+$("radarSrc").value,autoRotate:+$("autoRotate").value,
  meteoLegend:$("meteoLegend").checked,
+ screenDots:$("screenDots").checked,
  topBearing:+$("topBearing").value,secStyle:+$("secStyle").value,
  clockColor:hexToRgb565($("clockColor").value),secColor:hexToRgb565($("secColor").value),
  altMin:+$("altMin").value,altMax:+$("altMax").value,onlyCallsign:$("onlyCallsign").checked,
@@ -809,7 +839,8 @@ function body(){return{lat:parseFloat($("lat").value),lon:parseFloat($("lon").va
  windowOn:$("windowOn").checked,windowAz:+$("windowAz").value,windowWidth:+$("windowWidth").value,windowKm:+$("windowKm").value,
  haEnabled:$("haEnabled").checked,
  screens:{clock:$("sClock").checked,planes:$("sPlanes").checked,meteo:$("sMeteo").checked,
-  forecast:$("sForecast").checked,price:$("sPrice").checked,mix:$("sMix").checked}};}
+  forecast:$("sForecast").checked,price:$("sPrice").checked,mix:$("sMix").checked,
+  cards:$("sCards").checked}};}
 
 async function save(){
  const bb=body(),ab=altBands();if(altOk(ab))bb.altBands=ab;
@@ -920,6 +951,32 @@ async function importCfg(el){
   body:JSON.stringify({password:$("adminPass").value,config:JSON.parse(t)})});
  msg(r.ok?D[L].saved:D[L].failed,r.ok?"ok":"err");if(r.ok)load();
 }
+// JSON cards. A title is whatever the card's author typed, so it is escaped;
+// an id is restricted by the device to a-z, 0-9 and "-".
+function escHtml(t){return String(t).replace(/[&<>"']/g,c=>"&#"+c.charCodeAt(0)+";");}
+async function cardsLoad(){
+ try{const c=await(await fetch("/api/cards")).json();
+ $("cardsTab").innerHTML=c.cards.length?c.cards.map(k=>{
+  let h="";try{h=new URL(k.url).host}catch(e){}
+  return "<tr><td><b>"+escHtml(k.title)+"</b><br><small>"+k.id+" · "+escHtml(h)+"</small></td><td>"+
+   (k.ok?"OK":(k.tried?D[L].cardErr:D[L].cardWait))+"</td><td><button class='danger' onclick='cardDel(\""+k.id+
+   "\")'>"+D[L].cardDel+"</button></td></tr>";}).join(""):"<tr><td>"+D[L].cardsNone+"</td></tr>";}catch(e){}
+}
+async function cardPost(u,b){
+ b.password=$("adminPass").value;
+ const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
+ if(r.ok)msg(D[L].saved,"ok");
+ else{let e="";try{e=(await r.json()).error}catch(x){}msg(D[L].failed+(e?": "+e:" ("+r.status+")"),"err");}
+ cardsLoad();
+}
+async function cardInstall(el){
+ const f=el.files[0];if(!f)return;let j=null;
+ try{j=JSON.parse(await f.text())}catch(e){}
+ el.value="";
+ if(!j){msg(D[L].cardBad,"err");return;}
+ await cardPost("/api/cards",{card:j});
+}
+function cardDel(id){cardPost("/api/cards/delete",{id:id});}
 async function doReboot(){await fetch("/api/reboot",{method:"POST"});msg("…");}
 async function doReset(){
  if(!confirm(D[L].confirmReset))return;

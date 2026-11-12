@@ -11,6 +11,39 @@ pohromadě v `MeteoPlaneRadar/Config.h`.
 
 ---
 
+## [Nevydáno]
+
+### Přidáno
+
+- **Karty — vlastní obrazovky popsané souborem JSON.** Nová obrazovka Karty
+  ukazuje až čtyři hodnoty stažené z adresy, kterou určuje karta: malý soubor
+  s nadpisem, adresou a cestami k hodnotám v odpovědi. Karta je popis, ne
+  program — rozvržení na kulatém displeji dělá firmware. Karet může být osm a každá je
+  samostatná obrazovka: střídá se s ostatními ve stejném intervalu. Nahrávají a mažou se na webu na
+  záložce Obrazovky (s heslem správce, je-li nastavené). Ukázka s kurzy ČNB
+  a popis formátu: [cards/README.md](cards/README.md).
+
+  Obrazovka je ve výchozím stavu vypnutá a vypnutá nic nestahuje.
+
+### Změněno
+
+- Karty se ukládají do LittleFS v oddílu `spiffs`, který v `partitions.csv`
+  byl od začátku a nic ho nepoužívalo. Při prvním startu po aktualizaci se
+  oddíl jednorázově naformátuje (ještě před rozsvícením displeje).
+- Index obrazovky Nastavení se posunul z 6 na 7, Karty mají 6 — stejný postup
+  jako u energetických obrazovek v 0.7.0. Uložená nastavení zůstávají platná.
+- `/api/config` a export nastavení mají v `screens` nový klíč `cards`,
+  `/api/status` nový řádek `cards`, `/api/ha` může v `screen` vrátit `cards`.
+  Nové jsou `/api/cards` (GET, POST) a `/api/cards/delete` (POST).
+- **Tečky obrazovek nahoře jdou vypnout a ve výchozím stavu jsou skryté.**
+  Každá karta je samostatná obrazovka a má svou tečku, takže s několika
+  kartami byla řada dlouhá a málo říkala. Zapíná se na webu na záložce
+  Obrazovky volbou „Zobrazovat tečky obrazovek nahoře“ a změna se projeví
+  hned, bez restartu. V `/api/config` a v exportu nastavení je to klíč
+  `screenDots`.
+
+---
+
 ## [0.8.5]
 
 ### Změněno

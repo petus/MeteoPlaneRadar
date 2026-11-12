@@ -97,7 +97,10 @@
   X(S_OTHER,         "ostatni",            "ostatní",            "other") \
   X(S_OLD_PLANES,    "stara data",         "stará data",         "old data") \
   X(S_NO_PLANE_DATA, "bez dat o letadlech", "bez dat o letadlech", "no aircraft data") \
-  X(S_PAUSE,         "pauza",              "pauza",              "pause")
+  X(S_PAUSE,         "pauza",              "pauza",              "pause") \
+  X(S_CARDS,         "Karty",              "Karty",              "Cards") \
+  X(S_CARDS_NONE,    "zadna karta - pridejte ji z webu", "žádná karta - přidejte ji z webu", "no card yet - add one in the web UI") \
+  X(S_CARD_NO_DATA,  "data nejsou k dispozici", "data nejsou k dispozici", "no data available")
 
 enum StrId : uint16_t {
 #define X(id, cz, czw, en) id,

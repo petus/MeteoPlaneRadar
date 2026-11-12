@@ -323,6 +323,9 @@
 //  Settings screen when it was updated has "4" stored as its last screen, which
 //  now means Prices. That screen is off by default, so the boot check in the
 //  .ino notices and falls back to the first enabled one. It corrects itself.
+//
+//  0.9.0 did the same again for the cards screen: it took 6, Settings moved to
+//  7, and bit 6 reads back as 0, so cards arrive switched off.
 // ---------------------------------------------------------------------------
 #define SCREEN_CLOCK_I    0
 #define SCREEN_PLANES_I   1
@@ -330,8 +333,9 @@
 #define SCREEN_FORECAST_I 3
 #define SCREEN_PRICE_I    4
 #define SCREEN_MIX_I      5
-#define SCREEN_SETTINGS_I 6
-#define SCREEN_N          7
+#define SCREEN_CARDS_I    6    // 0.9.0 - user-installed JSON cards (Cards.h)
+#define SCREEN_SETTINGS_I 7
+#define SCREEN_N          8
 
 // Automatic screen cycling: 0 = off, otherwise SECONDS between switches (it was
 // minutes up to 0.6.0 - see Settings.h).
@@ -725,3 +729,13 @@
 #define ADSB_RETRY_AFTER_MAX_S   900       // trust Retry-After up to 15 min
 #define ADSB_STALE_MS          60000UL     // grey after one minute
 #define ADSB_HIDE_MS          600000UL     // gone after ten
+
+// ---------------------------------------------------------------------------
+//  JSON cards (0.9.0) - see Cards.h
+// ---------------------------------------------------------------------------
+#define CARDS_MAX          8         // installed at once
+#define CARD_ROWS_MAX      4         // values on one card
+#define CARD_FILE_MAX      2048      // bytes of one card's JSON
+#define CARD_REFRESH_MIN   5         // minutes; a card may not ask for less
+#define CARD_REFRESH_DEF   60
+#define CARD_RETRY_MS      120000UL  // after a failed fetch

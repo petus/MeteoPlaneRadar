@@ -23,9 +23,10 @@ ESP32-S3-Touch-LCD-2.1 a ESP32-S3-Touch-LCD-2.8C a nastavuje se z prohlížeče.
 | **Předpověď** | nyní, +3 h, +6 h, dnes, zítra, pozítří a další dny, ovzduší a pyl | Open-Meteo |
 | **Cena elektřiny** | spotová cena na 24hodinovém ciferníku, dnes i zítra | OTE přes spotovaelektrina.cz |
 | **Výroba ČR** | z čeho se právě vyrábí, podíl OZE, spotřeba, vývoz | ENTSO-E přes energy-charts |
+| **Karty** | vlastní hodnoty z libovolného JSON rozhraní, např. kurzy ČNB | podle karty, viz [cards](cards/README.md) |
 | **Nastavení** | jas, orientace mapy, jednotky, jazyk | — |
 
-Prvních šest jde vypnout, Nastavení je dostupné vždy. Rozhraní je česky nebo
+Prvních sedm jde vypnout, Nastavení je dostupné vždy. Rozhraní je česky nebo
 anglicky. Písmo pro celý displej se volí na webu: vyhlazené Inter, Poppins,
 Inter tenké (s diakritikou), nebo původní pixelové.
 
@@ -189,6 +190,17 @@ Proč ne MQTT: potřebovalo by broker v síti, další knihovnu a nastavování
 přihlašovacích údajů. REST stačí na čtení a jde nastavit jen vložením textu.
 Kdyby se ukázalo, že je potřeba i ovládání z Home Assistantu, existující
 adresy `/api/screen` a `/api/range` jde volat přes `rest_command`.
+
+## Karty
+
+Obrazovka **Karty** ukazuje hodnoty, které si doplníte sami: karta je malý
+soubor JSON, který říká, odkud se má hodnota stáhnout a jak ji pojmenovat.
+Neobsahuje žádný kód. Nahrává se z webu (záložka Obrazovky) a ukládá se do
+flash, takže přežije restart i aktualizaci firmwaru. Ukázková karta s kurzy
+ČNB a popis formátu jsou ve složce [cards](cards/README.md).
+
+Obrazovka je po aktualizaci vypnutá a dokud je vypnutá, zařízení kvůli ní nic
+nestahuje.
 
 ## Hodiny bez NTP
 
