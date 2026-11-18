@@ -20,6 +20,8 @@ static bool s_ap = false;
 static unsigned long s_lastReconnect = 0;
 static unsigned long s_lostSince = 0;      // when the link went down, 0 = up
 static int  s_slot = -1;                   // which remembered network we are on
+static unsigned long s_apLastClient = 0;   // last time anyone was on the access point
+static unsigned long s_apNextRetry = 0;    // next look for a remembered network
 
 bool   WiFi_IsAP()        { return s_ap; }
 bool   WiFi_IsConnected() { return WiFi.status() == WL_CONNECTED; }
@@ -32,29 +34,31 @@ String WiFi_IP()   { return WiFi_IsConnected() ? WiFi.localIP().toString()
 
 // --- Screens ----------------------------------------------------------------
 void WiFi_DrawApScreen() {
-  const bool en = (Lang_Get() == LANG_EN);
   gfx->fillScreen(C_BLACK);
 
   UI_TextCentered("MeteoPlaneRadar", 34, C_CYAN, 2);
   UI_TextCentered("chiptron.cz", 58, C_GRAY, 1);
-  UI_TextCentered(en ? "Scan with your phone:" : "Naskenuj mobilem:", 78, C_GRAY, 1);
+  UI_TextCentered(LT("Naskenujte mobilem:", "Naskenujte mobilem:", "Scan with your phone:",
+                     "Naskenujte mobilom:", "Naskenujte mobilom:"), 78, C_GRAY, 1);
 
   const int qrSize = 190;
   UI_DrawWifiQR(AP_SSID, AP_PASSWORD, /*open=*/true,
                 (LCD_WIDTH - qrSize) / 2, 98, qrSize);
 
   UI_TextCentered(AP_SSID, 300, C_WHITE, 1);
-  UI_TextCentered(en ? "no password  |  then open 192.168.4.1"
-                     : CZT("bez hesla  |  pak otevri 192.168.4.1", "bez hesla  |  pak otevři 192.168.4.1"), 322, C_GRAY, 1);
-  UI_TextCentered(en ? "Waiting for your network..."
-                     : CZT("Cekam na zadani site...", "Čekám na zadání sítě..."), 348, C_YELLOW, 1);
+  UI_TextCentered(LT("bez hesla  |  pak otevrete 192.168.4.1", "bez hesla  |  pak otevřete 192.168.4.1",
+                     "no password  |  then open 192.168.4.1",
+                     "bez hesla  |  potom otvorte 192.168.4.1", "bez hesla  |  potom otvorte 192.168.4.1"),
+                  322, C_GRAY, 1);
+  UI_TextCentered(LT("Cekam na zadani site...", "Čekám na zadání sítě...", "Waiting for your network...",
+                     "Cakam na zadanie siete...", "Čakám na zadanie siete..."), 348, C_YELLOW, 1);
   gfx->flush();
 }
 
 static void drawConnecting(const char* ssid) {
-  const bool en = (Lang_Get() == LANG_EN);
   gfx->fillScreen(C_BLACK);
-  UI_TextCentered(en ? "Connecting to WiFi..." : CZT("Pripojuji k WiFi...", "Připojuji k WiFi..."),
+  UI_TextCentered(LT("Pripojuji k WiFi...", "Připojuji k WiFi...", "Connecting to WiFi...",
+                     "Pripajam sa k WiFi...", "Pripájam sa k WiFi..."),
                   LCD_HEIGHT / 2 - 20, C_WHITE, 2);
   if (ssid && *ssid) UI_TextCentered(ssid, LCD_HEIGHT / 2 + 12, C_CYAN, 2);
   gfx->flush();
@@ -68,6 +72,8 @@ static void startAP() {
   WiFi.softAP(AP_SSID, pass);
   delay(200);
   s_ap = true;
+  s_apLastClient = millis();
+  s_apNextRetry = millis() + WIFI_AP_RETRY_MS;
   Serial.printf("WiFi: pristupovy bod %s, http://%s/\n",
                 AP_SSID, WiFi.softAPIP().toString().c_str());
   WebConfig_Begin(true);
@@ -160,6 +166,45 @@ static bool tryConnect(uint32_t timeoutMs) {
   return connectAny(true, 0, false);
 }
 
+// Access point up although networks are remembered (see WIFI_AP_RETRY_MS in
+// Config.h). Nothing happens while someone is connected to the access point -
+// they are probably entering a network right now, and a scan would hop
+// channels under them.
+static void apUpkeep() {
+  if (!Settings_HasWifi()) return;                // first run: wait for the user
+  const unsigned long now = millis();
+  if (WiFi.softAPgetStationNum() > 0) {
+    s_apLastClient = now;
+    s_apNextRetry = now + WIFI_AP_RETRY_MS;
+    return;
+  }
+  if (now - s_apLastClient >= WIFI_AP_RESTART_MS) {
+    Serial.println("WiFi: pristupovy bod 30 min bez obsluhy, restartuji");
+    Serial.flush();
+    delay(200);
+    ESP.restart();
+  }
+  if ((long)(now - s_apNextRetry) < 0) return;
+  s_apNextRetry = now + WIFI_AP_RETRY_MS;
+
+  // Scan with the access point still up, so the QR code keeps working.
+  WiFi.mode(WIFI_AP_STA);
+  const int found = WiFi.scanNetworks();
+  bool seen = false;
+  for (int k = 0; k < found && !seen; k++)
+    for (int i = 0; i < WIFI_SLOTS; i++) {
+      const char* ss = Settings_WifiSsid((uint8_t)i);
+      if (*ss && WiFi.SSID(k) == ss) { seen = true; break; }
+    }
+  WiFi.scanDelete();
+  Watchdog_Feed();
+  if (!seen) { WiFi.mode(WIFI_AP); return; }
+
+  Serial.println("WiFi: ulozena sit je zpet v dosahu, pripojuji");
+  if (connectAny(true, -1, true)) return;
+  startAP();                                      // not this time - QR back up
+}
+
 void WiFi_Begin() {
   if (Settings_HasWifi() && connectAny(true, -1, false)) return;
   startAP();
@@ -180,7 +225,7 @@ void WiFi_Loop() {
     return;
   }
 
-  if (s_ap) return;                       // nothing to keep alive in AP mode
+  if (s_ap) { apUpkeep(); return; }
 
   if (WiFi.status() == WL_CONNECTED) { s_lostSince = 0; return; }
   unsigned long now = millis();

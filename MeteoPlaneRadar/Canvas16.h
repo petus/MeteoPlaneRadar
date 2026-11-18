@@ -22,6 +22,8 @@
 #include "esp_heap_caps.h"
 #include "Display_ST7701.h"
 #include "AAFont.h"     // smooth text for every print() - 0.8.5
+#include "Config.h"     // TEXT_CHECK
+#include "Layout.h"     // Layout_NoteText (TEXT_CHECK)
 
 class Canvas16 : public Arduino_GFX {
  public:
@@ -62,15 +64,26 @@ class Canvas16 : public Arduino_GFX {
       size_t start = 0;
       for (size_t i = 0; i <= n; i++) {
         if (i == n || buf[i] == '\n') {
-          if (i > start)
-            cursor_x += AAText_Print(buf + start, i - start, cursor_x, cursor_y,
-                                     textsize_x, textcolor, textbgcolor);
+          if (i > start) {
+            const int w = AAText_Print(buf + start, i - start, cursor_x, cursor_y,
+                                       textsize_x, textcolor, textbgcolor);
+#if TEXT_CHECK
+            Layout_NoteText(cursor_x, cursor_y, w, 8 * textsize_y,
+                            (const char*)buf + start, i - start);
+#endif
+            cursor_x += w;
+          }
           if (i < n) { cursor_x = 0; cursor_y += 8 * textsize_y; }
           start = i + 1;
         }
       }
       return n;
     }
+#if TEXT_CHECK
+    // The built-in font: 6 x 8 px per character and size step.
+    Layout_NoteText(cursor_x, cursor_y, (int)n * 6 * textsize_x, 8 * textsize_y,
+                    (const char*)buf, n);
+#endif
     return Print::write(buf, n);
   }
   size_t write(uint8_t c) override {
@@ -89,6 +102,9 @@ class Canvas16 : public Arduino_GFX {
   void flush(bool force_flush = false) override {
     (void)force_flush;
     if (!_fb) return;
+#if TEXT_CHECK
+    Layout_TextCheckFrame();
+#endif
     LCD_Flush(_fb);
     if (!_owned) {
       int next = _fbIndex ^ 1;

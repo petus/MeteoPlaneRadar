@@ -34,6 +34,14 @@ static Box makeBox(int x, int y, int w, int h) {
   return b;
 }
 
+bool Layout_InsideCircle(int x, int y, int w, int h) {
+  const int half1 = Layout_ChordHalf(y);
+  const int half2 = Layout_ChordHalf(y + h - 1);
+  const int half  = (half1 < half2) ? half1 : half2;
+  if (half <= 0) return false;
+  return (x >= LCD_WIDTH / 2 - half) && (x + w <= LCD_WIDTH / 2 + half);
+}
+
 static bool Layout_IsFree(int x, int y, int w, int h) {
   if (w <= 0 || h <= 0) return true;
   Box b = makeBox(x, y, w, h);
@@ -49,6 +57,10 @@ void Layout_Reserve(int x, int y, int w, int h) {
 
 bool Layout_Claim(int x, int y, int w, int h) {
   if (w <= 0 || h <= 0) return true;
+  // 0.8.6: the rim counts as taken too. A callsign or a city label next to the
+  // edge used to be drawn half off the glass; now it is left out like any
+  // other label that has no room.
+  if (!Layout_InsideCircle(x, y, w, h)) return false;
   if (!Layout_IsFree(x, y, w, h)) return false;
   if (s_n >= LAYOUT_MAX) return false;   // out of slots - refuse rather than risk
   s_box[s_n++] = makeBox(x, y, w, h);
@@ -126,3 +138,69 @@ void Layout_SelfTest() {
   Serial.printf("LAYOUT: %s (%d pasu)\n", clashes ? "NALEZENY KOLIZE" : "OK", n);
 #endif
 }
+
+// --- Text collision check (0.8.6) -------------------------------------------
+// See TEXT_CHECK in Config.h. Every string that reaches the display is noted
+// with the rectangle of its text cell; on flush the rectangles are compared.
+#if TEXT_CHECK
+struct TextRec { Box b; char s[40]; };
+#define TEXT_MAX 160
+static TextRec s_txt[TEXT_MAX];
+static int s_nt = 0;
+
+void Layout_NoteText(int x, int y, int w, int h, const char* s, size_t n) {
+  if (w <= 0 || h <= 0 || !s || !n) return;
+  // A blank string or one made only of spaces covers nothing worth checking.
+  bool ink = false;
+  for (size_t i = 0; i < n; i++) if (s[i] != ' ') { ink = true; break; }
+  if (!ink) return;
+  if (s_nt >= TEXT_MAX) return;
+  TextRec& t = s_txt[s_nt++];
+  t.b = makeBox(x, y, w, h);
+  const size_t m = n < sizeof(t.s) - 1 ? n : sizeof(t.s) - 1;
+  memcpy(t.s, s, m);
+  t.s[m] = '\0';
+}
+
+int Layout_TextCheckFrame() {
+  int problems = 0;
+  const int cx = LCD_WIDTH / 2, cy = LCD_HEIGHT / 2, r = LCD_WIDTH / 2;
+  for (int i = 0; i < s_nt; i++) {
+    const Box& a = s_txt[i].b;
+    // Inside the circle: all four corners. One pixel of slack - an accent
+    // touching the rim is not worth a report.
+    const int xs[2] = { a.x0, a.x1 }, ys[2] = { a.y0, a.y1 };
+    bool out = false;
+    for (int xi = 0; xi < 2; xi++)
+      for (int yi = 0; yi < 2; yi++) {
+        const long dx = xs[xi] - cx, dy = ys[yi] - cy;
+        if (dx * dx + dy * dy > (long)(r + 1) * (r + 1)) out = true;
+      }
+    // Report a string drawn twice at the same spot (an outline, a redraw) once.
+    for (int k = 0; k < i && out; k++)
+      if (s_txt[k].b.x0 == a.x0 && s_txt[k].b.y0 == a.y0 && !strcmp(s_txt[k].s, s_txt[i].s)) out = false;
+    if (out) {
+      Serial.printf("TEXT: \"%s\" (%d,%d %dx%d) presahuje okraj displeje\n",
+                    s_txt[i].s, a.x0, a.y0, a.x1 - a.x0 + 1, a.y1 - a.y0 + 1);
+      problems++;
+    }
+    for (int j = i + 1; j < s_nt; j++) {
+      const Box& b = s_txt[j].b;
+      // The same string at the same place is a redraw, not a collision.
+      if (a.x0 == b.x0 && a.y0 == b.y0 && !strcmp(s_txt[i].s, s_txt[j].s)) continue;
+      // One pixel of slack on every side: cells that merely touch are fine.
+      if (a.x0 + 1 <= b.x1 && a.x1 - 1 >= b.x0 && a.y0 + 1 <= b.y1 && a.y1 - 1 >= b.y0) {
+        Serial.printf("TEXT: \"%s\" (%d,%d %dx%d) prekryva \"%s\" (%d,%d %dx%d)\n",
+                      s_txt[i].s, a.x0, a.y0, a.x1 - a.x0 + 1, a.y1 - a.y0 + 1,
+                      s_txt[j].s, b.x0, b.y0, b.x1 - b.x0 + 1, b.y1 - b.y0 + 1);
+        problems++;
+      }
+    }
+  }
+  s_nt = 0;
+  return problems;
+}
+#else
+void Layout_NoteText(int, int, int, int, const char*, size_t) {}
+int  Layout_TextCheckFrame() { return 0; }
+#endif

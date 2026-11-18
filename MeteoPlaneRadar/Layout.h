@@ -66,6 +66,10 @@ void Layout_ReserveTextCentered(const char* s, uint8_t size, int cx, int y);
 // Returns false when it is not - the caller then draws nothing at all.
 bool Layout_Claim(int x, int y, int w, int h);
 
+// Does the rectangle fit on the round glass? Layout_Claim() refuses anything
+// that does not (0.8.6).
+bool Layout_InsideCircle(int x, int y, int w, int h);
+
 // Width of a string in the built-in font.
 int  Layout_TextW(const char* s, uint8_t size);
 
@@ -78,3 +82,10 @@ int  Layout_ChordHalf(int y);
 // at boot when LAYOUT_DEBUG is on - catches a mistyped constant before it turns
 // into two labels sitting on each other.
 void Layout_SelfTest();
+
+// Text collision check (TEXT_CHECK in Config.h, 0.8.6). NoteText records one
+// drawn string; TextCheckFrame compares everything recorded since the last
+// call, reports overlaps and texts outside the circle, and starts over.
+// Returns the number of problems found. Both are empty when TEXT_CHECK is 0.
+void Layout_NoteText(int x, int y, int w, int h, const char* s, size_t n);
+int  Layout_TextCheckFrame();

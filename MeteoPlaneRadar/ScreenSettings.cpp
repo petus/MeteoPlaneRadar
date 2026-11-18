@@ -103,7 +103,8 @@ bool ScreenSettings_HandleTap(int x, int y) {
     return true;
   }
   if (y >= BTN1_Y && y <= BTN1_Y + BTN_H) {
-    Settings_SetLanguage(Lang_Get() == LANG_CZ ? LANG_EN : LANG_CZ);
+    // Cycles through all three: cestina -> English -> slovencina.
+    Settings_SetLanguage((uint8_t)((Lang_Get() + 1) % LANG_N));
     return true;
   }
   if (y >= BTN2_Y && y <= BTN2_Y + BTN_H) {
@@ -130,9 +131,11 @@ void ScreenSettings_Draw() {
   // looks like it did not stick, when in fact the other level was changed.
   if (Settings_NightAuto() || Settings_IsNight()) {
     gfx->setTextSize(1);
-    gfx->setCursor(SL_X + 60, ROW_BRIGHT + 6);
-    gfx->print(Settings_IsNight() ? (Lang_Get() == LANG_EN ? "(night)" : CZT("(nocni)", "(noční)"))
-                                  : (Lang_Get() == LANG_EN ? "(day)"   : CZT("(denni)", "(denní)")));
+    // Right after the word, however long it is in this language and typeface
+    // (0.8.6: "Brightness" ran under a fixed offset).
+    gfx->setCursor(SL_X + Layout_TextW(T(S_BRIGHTNESS), 2) + 8, ROW_BRIGHT + 6);
+    gfx->print(Settings_IsNight() ? LT("(nocni)", "(noční)", "(night)", "(nocny)", "(nočný)")
+                                  : LT("(denni)", "(denní)", "(day)", "(denny)", "(denný)"));
   }
   uint8_t bl = Settings_Backlight();
   char blbuf[8]; snprintf(blbuf, sizeof(blbuf), "%d%%", bl);
@@ -203,11 +206,12 @@ void ScreenSettings_Draw() {
                   BTN0_Y + BTN_H / 2 - 8, C_BLACK, 2);
 
   gfx->fillRoundRect(BTN_X, BTN1_Y, BTN_W, BTN_H, 12, C_CYAN);
-  UI_TextCentered(Lang_Get() == LANG_EN ? "Language: English" : CZT("Jazyk: cestina", "Jazyk: čeština"),
+  UI_TextCentered(LT("Jazyk: cestina", "Jazyk: čeština", "Language: English",
+                     "Jazyk: slovencina", "Jazyk: slovenčina"),
                   BTN1_Y + BTN_H / 2 - 8, C_BLACK, 2);
 
   gfx->fillRoundRect(BTN_X, BTN2_Y, BTN_W, BTN_H, 12, C_ORANGE);
-  UI_TextCentered(Lang_Get() == LANG_EN ? "Forget WiFi" : "Zapomenout WiFi",
+  UI_TextCentered(LT("Zapomenout WiFi", "Zapomenout WiFi", "Forget WiFi", "Zabudnut WiFi", "Zabudnúť WiFi"),
                   BTN2_Y + BTN_H / 2 - 8, C_BLACK, 2);
 
   UI_TextCentered("chiptron.cz", LY_FOOTER, C_GREEN, 2);

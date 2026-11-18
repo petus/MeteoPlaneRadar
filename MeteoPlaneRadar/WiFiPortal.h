@@ -9,9 +9,14 @@
 //  same two languages as the rest of the device and the main loop keeps
 //  running the whole time.
 //
-//  The access point has NO timeout. Without a network the device cannot fetch
-//  anything, so there is nothing to go back to - the old three-minute timeout
-//  just dropped the user onto an empty radar.
+//  On a first run the access point has no timeout: without a network the
+//  device cannot fetch anything, so there is nothing to go back to.
+//
+//  With networks remembered it does not wait forever, though. The access point
+//  then usually means the router was not up yet when the device booted (after
+//  a power cut or a watchdog restart), so every two minutes the device looks
+//  for a remembered network and joins it, and after 30 minutes with nobody on
+//  the access point it restarts. See WIFI_AP_RETRY_MS in Config.h.
 //
 //  Project: MeteoPlaneRadar - live aircraft radar on a round touchscreen
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)

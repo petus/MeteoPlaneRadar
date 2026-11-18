@@ -10,6 +10,8 @@
 #include "Config.h"
 #include "UI.h"
 #include "Settings.h"
+#include "Layout.h"     // Layout_NoteText (TEXT_CHECK)
+#include <string.h>
 
 // Next code point from a UTF-8 string. Malformed bytes come back one by one as
 // themselves, which the glyph lookup then simply does not find.
@@ -71,7 +73,22 @@ static int drawRun(const AAFont* f, const char* s, const char* end, int x, int y
                    uint16_t color, int maxW);
 
 int AAFont_Draw(const AAFont* f, const char* s, int x, int y, uint16_t color) {
-  return drawRun(f, s, nullptr, x, y, color, 0);
+  const int end = drawRun(f, s, nullptr, x, y, color, 0);
+#if TEXT_CHECK
+  // The ink of these glyphs, top to bottom - the clock digits have no
+  // descenders, so a fixed cell would claim pixels they never touch.
+  if (f && s) {
+    int top = 0, bot = 0;
+    for (const char* p = s; *p;) {
+      const AAGlyph* g = find(f, nextCp(p));
+      if (!g || !g->h) continue;
+      if (g->dy < top) top = g->dy;
+      if (g->dy + g->h > bot) bot = g->dy + g->h;
+    }
+    Layout_NoteText(x, y + top, end - x, bot - top, s, strlen(s));
+  }
+#endif
+  return end;
 }
 
 static int runWidth(const AAFont* f, const char* s, const char* end) {
