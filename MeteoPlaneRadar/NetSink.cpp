@@ -11,6 +11,11 @@
 #include <esp_heap_caps.h>
 #include <Stream.h>
 
+// 0.9.2: what the network part is doing right now, for the stuck-loop report.
+static const char* s_activity = nullptr;
+void Net_SetActivity(const char* what) { s_activity = what; }
+const char* Net_Activity() { return s_activity; }
+
 class NetBufSink : public Stream {
 public:
   // buf/cap: caller-owned destination. poll: yield + feed the watchdog, called
@@ -45,6 +50,8 @@ private:
   uint32_t  _start;
   bool      _over    = false;
   bool      _timeout = false;
+public:
+  NetworkClient* conn = nullptr;   // 0.9.2: cut when the budget runs out
 };
 
 class NetScanSink : public Stream {
@@ -82,7 +89,24 @@ private:
   size_t    _fill    = 0;
   size_t    _total   = 0;
   bool      _timeout = false;
+public:
+  NetworkClient* conn = nullptr;   // 0.9.2: cut when the budget runs out
 };
+
+// 0.9.2: what a body read does when its budget runs out.
+//
+// A short write stops writeToStreamDataBlock() only when some bytes came in.
+// When the server (or a connection that died half-way - a router restart, a
+// WiFi drop) sends NOTHING, readBytes() returns 0 after the read timeout, the
+// sink is asked to write 0 bytes, 0 == 0 counts as success, and the loop goes
+// round again for as long as the socket claims to be connected - which for a
+// dead peer on a receive-only socket is forever. Each round fed the watchdog
+// through the poll callback, so nothing ever restarted: the screen stood still
+// and the touch did nothing. Closing the socket is the one thing that ends the
+// loop - connected() goes false and writeToStream() returns an error.
+static void cutOff(NetworkClient* c) {
+  if (c) c->stop();
+}
 
 NetBufSink::NetBufSink(uint8_t* buf, size_t cap, void (*poll)(), uint32_t budgetMs)
   : _buf(buf), _cap(buf ? cap : 0), _poll(poll), _budget(budgetMs),
@@ -99,6 +123,7 @@ size_t NetBufSink::write(const uint8_t* data, size_t len) {
   // retries once, then bails out with HTTPC_ERROR_STREAM_WRITE. That is the
   // only lever we have, since the block loop never asks us anything else.
   if (_budget && (millis() - _start) > _budget) {
+    if (!_timeout) cutOff(conn);     // see cutOff() below
     _timeout = true;
     return 0;
   }
@@ -128,7 +153,10 @@ long Net_ReadBody(HTTPClient& http, uint8_t* buf, size_t cap, const char* tag,
 
   // Reserve one byte so the body can always be NUL-terminated.
   NetBufSink sink(buf, cap - 1, poll, NET_BODY_BUDGET_MS);
+  sink.conn = http.getStreamPtr();
+  Net_SetActivity(tag);
   int ret = http.writeToStream(&sink);
+  Net_SetActivity(nullptr);
 
   if (sink.timedOut()) {
     Serial.printf("%s: prenos prekrocil %lu ms, preruseno\n",
@@ -165,8 +193,9 @@ size_t NetScanSink::write(const uint8_t* data, size_t len) {
   if (_poll) _poll();          // yield + feed the watchdog on every block
 
   if (_budget && (millis() - _start) > _budget) {
-    _timeout = true;
-    return 0;                  // short write - the only way to stop the loop
+    if (!_timeout) cutOff(conn);           // see cutOff(): a short write alone
+    _timeout = true;                       // does not stop a silent connection
+    return 0;
   }
   if (!data || len == 0) return 0;
 
@@ -207,7 +236,10 @@ long Net_ScanBody(HTTPClient& http, NetScanFn cb, void* user, const char* tag,
   if (!cb) return -1;
 
   NetScanSink sink(cb, user, poll, NET_BODY_BUDGET_MS);
+  sink.conn = http.getStreamPtr();
+  Net_SetActivity(tag);
   int ret = http.writeToStream(&sink);
+  Net_SetActivity(nullptr);
   sink.finish();               // the last, partial window
 
   if (sink.timedOut()) {

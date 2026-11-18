@@ -24,6 +24,7 @@
 #include "WxIcon.h"
 #include "Layout.h"
 #include "Lang.h"
+#include "SrcHealth.h"
 #include "UI.h"
 #include "Display_ST7701.h"
 #include "Config.h"
@@ -394,9 +395,7 @@ void ScreenForecast_Draw() {
     return;
   }
   if (!Forecast_Valid()) {
-    UI_TextCentered(T(S_FORECAST), LCD_HEIGHT / 2 - 20, C_WHITE, 2);
-    UI_TextCentered(WiFi.status() == WL_CONNECTED ? T(S_LOADING) : T(S_WIFI_WAIT),
-                    LCD_HEIGHT / 2 + 10, C_YELLOW, 2);
+    UI_NoData(T(S_FORECAST), Forecast_Health());   // 0.9.7: not "Loading..." for ever
     return;
   }
 

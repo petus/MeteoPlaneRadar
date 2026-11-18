@@ -13,7 +13,6 @@
 #include <Wire.h>
 
 #define TCA9554_ADDR        0x20
-#define TCA9554_INPUT_REG   0x00
 #define TCA9554_OUTPUT_REG  0x01
 #define TCA9554_CONFIG_REG  0x03
 

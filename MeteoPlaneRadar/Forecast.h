@@ -49,6 +49,8 @@ void Forecast_Tick();
 void Forecast_Invalidate();
 
 bool Forecast_Valid();
+struct SrcHealth;
+const SrcHealth& Forecast_Health();   // 0.9.7
 
 // Hours from NOW: index 0 is the hour we are in, index 3 is three hours out.
 // forecast_hours makes the API line the array up that way, so no searching.

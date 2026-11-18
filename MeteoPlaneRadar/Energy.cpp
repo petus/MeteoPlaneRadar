@@ -5,6 +5,7 @@
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
 // =============================================================================
 #include "Energy.h"
+#include "SrcHealth.h"
 #include "Net.h"
 #include "Settings.h"
 #include "Outside.h"
@@ -38,11 +39,15 @@ static float  s_export = NAN;
 static time_t s_mixAt = 0;
 
 static unsigned long s_mLastTry = 0;
+static SrcHealth     s_pHealth, s_mHealth;   // 0.9.7: what the screens say when there is no data
 static bool          s_mEverTried = false;
+static char          s_mixFor[4] = "";   // 0.9.4: country the data above is for
 
 static bool s_force = false;
 
 void Energy_Invalidate() { s_force = true; }
+const SrcHealth& Energy_PriceHealth() { return s_pHealth; }
+const SrcHealth& Energy_MixHealth()   { return s_mHealth; }
 
 // -----------------------------------------------------------------------------
 //  Where the two sources apply
@@ -517,7 +522,29 @@ static bool fetchMix() {
 }
 
 // -----------------------------------------------------------------------------
+// 0.9.4: the mix country was changed (web, import). The numbers we hold are
+// another country's - drop them now, so the screen says "loading" instead of
+// showing them under the new name, and ask for the new ones at the next turn.
+static void mixCountryCheck() {
+  const char* cc = Settings_MixCountry();
+  if (!strcmp(cc, s_mixFor)) return;
+  const bool had = s_mixFor[0] != '\0';
+  strncpy(s_mixFor, cc, sizeof(s_mixFor) - 1);
+  s_mixFor[sizeof(s_mixFor) - 1] = '\0';
+  if (!had) return;                      // first call after boot: nothing to drop
+  for (int g = 0; g < MIX_GROUPS; g++) s_mix[g] = 0;
+  s_mixOk = false;
+  s_renew = -1;
+  s_load = NAN;
+  s_export = NAN;
+  s_mixAt = 0;
+  s_mEverTried = false;                  // fetch at the next opportunity
+  s_mHealth.reset();
+  Serial.printf("Mix: zeme zmenena na %s, nacitam znovu\n", cc);
+}
+
 void Energy_Tick() {
+  mixCountryCheck();
   // Same rule as the forecast: with no link, do not even start the timers, or
   // an attempt made while WiFi was still coming up would count as "tried" and
   // push the real one half an hour out.
@@ -540,11 +567,21 @@ void Energy_Tick() {
 
   unsigned long now = millis();
 
+  // A changed mix country goes first: the screen is waiting on it right now.
+  if (wantMix && !s_mEverTried && s_pEverTried) {
+    s_mEverTried = true;
+    s_mLastTry = now;
+    const bool ok = fetchMix();
+    s_mHealth.result(ok, ok ? MIX_PERIOD_MS : MIX_RETRY_MS);
+    return;
+  }
+
   if (wantPrice &&
       (!s_pEverTried || now - s_pLastTry >= (s_todayOk ? PRICE_PERIOD_MS : PRICE_RETRY_MS))) {
     s_pEverTried = true;
     s_pLastTry = now;
-    fetchPrice();
+    const bool ok = fetchPrice();
+    s_pHealth.result(ok, ok && s_todayOk ? PRICE_PERIOD_MS : PRICE_RETRY_MS);
     return;                          // one request per tick, never two in a row
   }
 
@@ -552,6 +589,7 @@ void Energy_Tick() {
       (!s_mEverTried || now - s_mLastTry >= (s_mixOk ? MIX_PERIOD_MS : MIX_RETRY_MS))) {
     s_mEverTried = true;
     s_mLastTry = now;
-    fetchMix();
+    const bool ok = fetchMix();
+    s_mHealth.result(ok, ok ? MIX_PERIOD_MS : MIX_RETRY_MS);
   }
 }

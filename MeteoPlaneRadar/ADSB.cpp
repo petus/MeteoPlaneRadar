@@ -46,7 +46,6 @@ static int           s_lastCode   = 0;
 unsigned long ADSB_DataAgeMs() { return s_everOk ? millis() - s_lastOkMs : 0xFFFFFFFFUL; }
 bool ADSB_DataStale()  { return ADSB_DataAgeMs() > ADSB_STALE_MS; }
 bool ADSB_DataHidden() { return ADSB_DataAgeMs() > ADSB_HIDE_MS; }
-int  ADSB_LastHttpCode() { return s_lastCode; }
 unsigned long ADSB_PauseLeftMs() {
   if (!s_blocked) return 0;
   const long left = (long)(s_blockUntil - millis());

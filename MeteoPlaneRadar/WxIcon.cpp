@@ -158,3 +158,29 @@ void WxIcon_Draw(int cx, int cy, int r, int code, bool night) {
       break;
   }
 }
+
+// -----------------------------------------------------------------------------
+//  0.9.7: Moon phase and rise / set marks
+// -----------------------------------------------------------------------------
+void WxIcon_Moon(int cx, int cy, int r, double phase, bool south) {
+  // The terminator is an ellipse: at height y the lit part starts at k*w(y),
+  // with k = cos(2*pi*phase) running from 1 (new) through 0 (quarter) to -1
+  // (full). Waxing is lit on the right as seen from the north.
+  const float k = cosf(2.0f * 3.14159265f * (float)phase);
+  const bool waxing = phase < 0.5;
+  for (int y = -r; y <= r; y++) {
+    const float w = sqrtf((float)(r * r - y * y));
+    for (int x = -r; x <= r; x++) {
+      if (x * x + y * y > r * r) continue;
+      const int xs = south ? -x : x;
+      const bool lit = waxing ? (xs > k * w) : (xs < -k * w);
+      gfx->drawPixel(cx + x, cy + y, lit ? 0xE71C : 0x3186);   // light / dark grey
+    }
+  }
+}
+
+void WxIcon_RiseSet(int x, int cy, int w, bool up) {
+  const int h = w - 1;
+  if (up) gfx->fillTriangle(x, cy + h / 2, x + w, cy + h / 2, x + w / 2, cy - h / 2, 0x07E0);   // green
+  else    gfx->fillTriangle(x, cy - h / 2, x + w, cy - h / 2, x + w / 2, cy + h / 2, 0xFC00);   // orange
+}

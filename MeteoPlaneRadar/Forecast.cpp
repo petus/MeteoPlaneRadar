@@ -5,6 +5,7 @@
 //  Author:  Petr / chiptron.cz   (vyvoj / development: chiptron.cz)
 // =============================================================================
 #include "Forecast.h"
+#include "SrcHealth.h"
 #include "TimeZone.h"
 #include "Net.h"
 #include "Settings.h"
@@ -27,6 +28,7 @@ static int   s_curCode = 0;
 static time_t s_sunrise = 0, s_sunset = 0;
 
 static unsigned long s_lastTry = 0;
+static SrcHealth     s_health;      // 0.9.7
 static bool          s_everTried = false;
 static bool          s_forceNext = false;
 
@@ -42,6 +44,7 @@ static bool          s_aqEverTried = false;
 void Forecast_Invalidate() { s_forceNext = true; }
 
 bool Forecast_Valid()        { return s_valid; }
+const SrcHealth& Forecast_Health() { return s_health; }
 int  Forecast_HourCount()    { return s_hourN; }
 const FcHour* Forecast_Hours() { return s_hours; }
 int  Forecast_DayCount()     { return s_dayN; }
@@ -256,10 +259,11 @@ static bool fetchAirQuality() {
   // show nothing at all rather than a confident zero.
   s_pollen = -1;
   s_pollenWorst = "";
-  struct { const char* key; const char* cz; const char* en; } P[] = {
-    { "alder_pollen", "olse",  "alder" },
-    { "birch_pollen", "briza", "birch" },
-    { "grass_pollen", "travy", "grass" },
+  struct { const char* key; const char* cz; const char* czA; const char* en;
+           const char* sk; const char* skA; } P[] = {
+    { "alder_pollen", "olse",  "olše",  "alder", "jelsa", "jelša" },
+    { "birch_pollen", "briza", "bříza", "birch", "breza", "breza" },
+    { "grass_pollen", "travy", "trávy", "grass", "travy", "trávy" },
   };
   for (auto& p : P) {
     JsonVariantConst v = cur[p.key];
@@ -267,7 +271,7 @@ static bool fetchAirQuality() {
     float f = v.as<float>();
     if (f > s_pollen) {
       s_pollen = f;
-      s_pollenWorst = (Lang_Get() == LANG_EN) ? p.en : p.cz;
+      s_pollenWorst = Lang_Pick(p.cz, p.czA, p.en, p.sk, p.skA);
     }
   }
 
@@ -296,7 +300,8 @@ void Forecast_Tick() {
   if (!s_everTried || now - s_lastTry >= (s_valid ? FORECAST_PERIOD_MS : FORECAST_RETRY_MS)) {
     s_everTried = true;
     s_lastTry = now;
-    fetchForecast();
+    const bool ok = fetchForecast();
+    s_health.result(ok, ok ? FORECAST_PERIOD_MS : FORECAST_RETRY_MS);
     return;                    // one request per tick - never two back to back
   }
 

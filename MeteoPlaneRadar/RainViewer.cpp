@@ -421,7 +421,7 @@ bool RainViewer_Step() {
       const int tiles = s_txN * s_tyN;
 
       // Wait out the backoff from the previous failure.
-      if (s_retryAt && millis() < s_retryAt) return false;
+      if (s_retryAt && (long)(millis() - s_retryAt) < 0) return false;   // wrap-safe
       s_retryAt = 0;
 
       bool ok = fetchOneTile(f, s_tilePos);

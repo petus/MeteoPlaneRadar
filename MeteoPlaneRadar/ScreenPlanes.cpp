@@ -31,6 +31,8 @@
 #define R_CX (LCD_WIDTH / 2)
 #define R_CY (LCD_HEIGHT / 2)
 #define R_RADIUS 230
+#define DETAIL_PW 320   // aircraft detail panel, centred
+#define DETAIL_PH 260
 
 // Ranges (radius in km).
 static const float RANGES_KM[] = PLANE_RANGES_KM;
@@ -224,9 +226,28 @@ void ScreenPlanes_Enter() {
 static bool s_alert = false;
 static bool s_alertWindow = false;
 static float s_alertKm = 0;
+// 0.9.8: with "open the detail" switched off the alert aircraft is only marked
+// - a cyan ring on the radar and its distance in the line under the clock - so
+// the map stays in view. Kept apart from the selection for that reason.
+static char  s_alertHex[8] = "";
+// 0.9.9: "radar first, then the detail". The radar part is a quarter of the
+// whole alert, at least 5 s - but never more than half of it (a 5 s alert
+// would otherwise be all radar) nor more than 15 s (it is for finding the
+// aircraft, not for waiting). 0 = no detail is waiting to open.
+static unsigned long s_alertDetailAt = 0;
+static unsigned long alertRadarMs() {
+  const unsigned long total = (unsigned long)Settings_PlaneAlertSec() * 1000UL;
+  unsigned long r = total / 4;
+  if (r < 5000UL)    r = 5000UL;
+  if (r > total / 2) r = total / 2;
+  if (r > 15000UL)   r = 15000UL;
+  return r;
+}
 
 void ScreenPlanes_AlertBegin(const char* hex, float distKm, bool inWindow) {
   s_alert = true;
+  strncpy(s_alertHex, hex ? hex : "", sizeof(s_alertHex) - 1);
+  s_alertHex[sizeof(s_alertHex) - 1] = '\0';
   s_alertWindow = inWindow;
   s_alertKm = distKm;
   // Smallest range that shows the aircraft with a little room to spare.
@@ -236,19 +257,26 @@ void ScreenPlanes_AlertBegin(const char* hex, float distKm, bool inWindow) {
   }
   s_rangeIdx = idx;
   s_nextFetch = 0;
-  if (hex && *hex) selectHex(hex);
+  s_alertDetailAt = 0;
+  if (!(hex && *hex)) return;
+  const uint8_t mode = Settings_PlaneAlertMode();
+  if (mode == PA_MODE_DETAIL) selectHex(hex);
+  else if (mode == PA_MODE_RADAR_DETAIL) {
+    s_alertDetailAt = millis() + alertRadarMs();
+    if (s_alertDetailAt == 0) s_alertDetailAt = 1;   // 0 means "nothing waiting"
+  }
 }
 
 void ScreenPlanes_AlertEnd() {
   if (!s_alert) return;
   s_alert = false;
+  s_alertDetailAt = 0;
+  s_alertHex[0] = '\0';
   selectNone("konec upozorneni");
   s_rangeIdx = Settings_PlaneRange();
   if (s_rangeIdx >= RANGE_COUNT) s_rangeIdx = 1;
   s_nextFetch = 0;
 }
-
-bool ScreenPlanes_AlertActive() { return s_alert; }
 
 bool ScreenPlanes_Tick() {
   if (WiFi.status() != WL_CONNECTED) { s_status = T(S_WIFI_WAIT); return false; }
@@ -259,7 +287,20 @@ bool ScreenPlanes_Tick() {
   // ukazoval "zjistuji trasu". Ctenim priznak zhasne, takze to prekresli jednou.
   bool routeChanged = Route_TakeChanged();
 
-  if (millis() >= s_nextFetch) {
+  // 0.9.9: the radar part of the alert is over - open the detail. An aircraft
+  // that has left the data meanwhile gets none; the radar stays to the end.
+  if (s_alert && s_alertDetailAt && (long)(millis() - s_alertDetailAt) >= 0) {
+    s_alertDetailAt = 0;
+    if (s_alertHex[0] && ADSB_FindByHex(s_alertHex) >= 0) {
+      selectHex(s_alertHex);
+      routeChanged = true;                 // redraw now, not with the next poll
+    }
+  }
+
+  // s_nextFetch == 0 means "now" (a range change, entering the screen); the
+  // rest is a signed difference so the millis() wrap after 49.7 days does not
+  // stop the downloads for weeks (0.9.2).
+  if (s_nextFetch == 0 || (long)(millis() - s_nextFetch) >= 0) {
     s_status = T(S_DOWNLOADING);
     s_dataOk = ADSB_Fetch(Settings_Lat(), Settings_Lon(), currentRange());
     s_status = s_dataOk ? T(S_OK) : T(S_ERROR);
@@ -351,6 +392,10 @@ void ScreenPlanes_Draw() {
   Layout_ReserveBand(LY_LEGEND - 2, 24);      // altitude legend + numbers
   Layout_ReserveBand(LY_RANGE - 2, 20);       // range readout
   Layout_ReserveBand(LY_RANGE_DOTS - 6, 12);  // range dots
+  // 0.8.6: the open detail panel covers the middle of the map. Callsigns that
+  // would end up half under it are dropped rather than peeking out at its edge.
+  if (ScreenPlanes_DetailOpen())
+    Layout_Reserve(R_CX - DETAIL_PW / 2, R_CY - DETAIL_PH / 2, DETAIL_PW, DETAIL_PH);
 
   // --- Map underlay ---
   // The map data spans the whole of Europe, so work out which slice of it can
@@ -431,6 +476,8 @@ void ScreenPlanes_Draw() {
 
   const char* alertCode = nullptr;    // worst emergency seen this frame
   bool watchedSeen = false;
+  float alertMarkKm = 0;
+  bool alertMarkSeen = false;
 
   for (int i = 0; i < n; i++) {
     s_planeX[i] = -9999; s_planeY[i] = -9999;   // default: off-screen
@@ -458,6 +505,18 @@ void ScreenPlanes_Draw() {
     // icon colour now carries the altitude, and cyan sat too close to the blue
     // of the cruise band to read as "selected".
     if (i == selIdx) gfx->drawCircle(sx, sy, 16, C_WHITE);
+    // 0.9.8: the alert aircraft when the alert does not open its detail. Outside
+    // the emergency / watched rings, so all three can be seen at once.
+    const bool alertMark = s_alert && s_alertHex[0] && !strcmp(list[i].hex, s_alertHex);
+    if (alertMark) {
+      gfx->drawCircle(sx, sy, 24, C_CYAN); gfx->drawCircle(sx, sy, 25, C_CYAN);
+      Geo_DistBearing(Settings_Lat(), Settings_Lon(), list[i].lat, list[i].lon, &alertMarkKm, nullptr);
+      alertMarkSeen = true;
+      // The detail opens in a few seconds: ask for the route now, so it is
+      // there when the panel comes up. Cheap and idempotent - see Route.h.
+      if (s_alertDetailAt && Settings_ShowRoute())
+        Route_Select(list[i].callsign, list[i].lat, list[i].lon);
+    }
     // An emergency gets a red ring, a watched aircraft a green one. Both are
     // drawn wider than the selection ring so they read at a glance.
     if (em)      { gfx->drawCircle(sx, sy, 20, C_RED);   gfx->drawCircle(sx, sy, 21, C_RED); }
@@ -526,6 +585,12 @@ void ScreenPlanes_Draw() {
     UI_TextCentered(sub, LY_SUB, C_YELLOW, 1);
   } else if (WiFi.status() != WL_CONNECTED || !s_dataOk) {
     UI_TextCentered(s_status.c_str(), LY_SUB, C_YELLOW, 1);
+  } else if (alertMarkSeen && !ScreenPlanes_DetailOpen()) {
+    // 0.9.8: why the screen came up, where the detail panel would have said it.
+    snprintf(sub, sizeof(sub), "%s  %.1f km",
+             s_alertWindow ? LT("v okne", "v okně", "in the window", "v okne", "v okne")
+                           : LT("nablizku", "nablízku", "nearby", "nablizku", "nablízku"), alertMarkKm);
+    UI_TextCentered(sub, LY_SUB, C_CYAN, 1);
   } else {
     snprintf(sub, sizeof(sub), "%s: %d%s", T(S_AIRCRAFT), shown,
              watchedSeen ? " *" : "");
@@ -537,16 +602,34 @@ void ScreenPlanes_Draw() {
   // bar, with the band boundaries (2 / 6 / 10 km) marked underneath. It sits
   // below the aircraft count, where the round panel still has room - the bottom
   // of the screen is already taken by the range readout.
+  //
+  // 0.8.7: in the units the detail uses. Metric: kilometres. Aviation: feet, in
+  // thousands to fit under a 26 px swatch (2 km = 6 600 ft -> "6.6"). The
+  // boundaries are stored in metres; feet are rounded to 100 ft, so a boundary
+  // entered as 5 000 ft in the browser reads back as exactly "5".
   {
+    const bool metric = Settings_MetricUnits();
     uint16_t cols[4];
-    char bounds[3][8];                              // km, at the band edges
+    char bounds[3][8];                              // at the band edges
     for (int i = 0; i < 4; i++) cols[i] = Settings_AltColor(i);
     for (int i = 0; i < 3; i++) {
       const uint16_t m = Settings_AltBandM(i);
-      if (m % 1000 == 0) snprintf(bounds[i], sizeof(bounds[i]), "%u", (unsigned)(m / 1000));
-      else               snprintf(bounds[i], sizeof(bounds[i]), "%.1f", m / 1000.0f);
+      if (metric) {
+        if (m % 1000 == 0) snprintf(bounds[i], sizeof(bounds[i]), "%u", (unsigned)(m / 1000));
+        else               snprintf(bounds[i], sizeof(bounds[i]), "%.1f", m / 1000.0f);
+      } else {
+        const unsigned ft = (unsigned)((m / 0.3048f + 50.0f) / 100.0f) * 100u;
+        if (ft % 1000 == 0) snprintf(bounds[i], sizeof(bounds[i]), "%u", ft / 1000);
+        else                snprintf(bounds[i], sizeof(bounds[i]), "%.1f", ft / 1000.0f);
+      }
     }
-    const int sw = 26;                 // swatch width
+    // Swatch width: 26 px, or wider when the numbers under the edges need it
+    // (feet: "19.7" next to "32.8" would otherwise touch).
+    int sw = 26;
+    for (int i = 0; i < 3; i++) {
+      const int need = Layout_TextW(bounds[i], 1) + 8;
+      if (need > sw) sw = need;
+    }
     const int barW = 4 * sw;
     const int lx = R_CX - barW / 2;
     const int ly = LY_LEGEND;
@@ -568,7 +651,7 @@ void ScreenPlanes_Draw() {
     }
     // Unit, just past the right end of the bar.
     gfx->setCursor(lx + barW + 4, ly + 10);
-    gfx->print("km");
+    gfx->print(metric ? "km" : LT("tis. ft", "tis. ft", "kft", "tis. ft", "tis. ft"));
   }
 
   // --- Compass marks ---
@@ -621,7 +704,7 @@ void ScreenPlanes_Draw() {
     const bool metric = Settings_MetricUnits();
 
     // Panel centred so it fits inside the round display.
-    const int pw = 320, ph = 260;
+    const int pw = DETAIL_PW, ph = DETAIL_PH;
     const int px = R_CX - pw / 2;
     const int py = R_CY - ph / 2;
     gfx->fillRoundRect(px, py, pw, ph, 14, C_DKGRAY);
@@ -644,22 +727,26 @@ void ScreenPlanes_Draw() {
     // Data rows (font 2). Units converted according to the setting.
     char line[44];
     int ty = py + 56;
+    int rowsRight = px + 18;                 // right edge of the rows beside the icon
     gfx->setTextSize(2); gfx->setTextColor(C_WHITE);
 
     // Altitude: ft or m.
     if (metric) snprintf(line, sizeof(line), "%s: %.0f m", T(S_ALTITUDE), ac.altFt * 0.3048f);
     else        snprintf(line, sizeof(line), "%s: %.0f ft", T(S_ALTITUDE), ac.altFt);
     gfx->setCursor(px + 18, ty); gfx->print(line); ty += 26;
+    { const int cxr = (int)gfx->getCursorX(); if (cxr > rowsRight) rowsRight = cxr; }
 
     // Speed: kt or km/h.
     if (metric) snprintf(line, sizeof(line), "%s: %.0f km/h", T(S_SPEED), ac.gsKt * 1.852f);
     else        snprintf(line, sizeof(line), "%s: %.0f kt", T(S_SPEED), ac.gsKt);
     gfx->setCursor(px + 18, ty); gfx->print(line); ty += 26;
+    { const int cxr = (int)gfx->getCursorX(); if (cxr > rowsRight) rowsRight = cxr; }
 
     // Ground track.
     if (ac.hasTrack) snprintf(line, sizeof(line), "%s: %.0f deg", T(S_TRACK), ac.track);
     else             snprintf(line, sizeof(line), "%s: %s", T(S_TRACK), T(S_UNKNOWN));
     gfx->setCursor(px + 18, ty); gfx->print(line); ty += 26;
+    { const int cxr = (int)gfx->getCursorX(); if (cxr > rowsRight) rowsRight = cxr; }
 
     // Climb/descent - short label + units so the line does not overflow.
     // An arrow instead of the words "climbing/descending".
@@ -667,14 +754,39 @@ void ScreenPlanes_Draw() {
     if (metric) snprintf(line, sizeof(line), "%s: %.1f m/s %s", T(S_CLIMB), ac.baroRate * 0.00508f, ar);
     else        snprintf(line, sizeof(line), "%s: %.0f ft/m %s", T(S_CLIMB), ac.baroRate, ar);
     gfx->setCursor(px + 18, ty); gfx->print(line); ty += 26;
+    { const int cxr = (int)gfx->getCursorX(); if (cxr > rowsRight) rowsRight = cxr; }
+
+    // 0.9.9: the aircraft itself beside these four rows - up to three times the
+    // radar icon, nose turned like the map (so it points the way its small
+    // icon does) and in its altitude colour. The text comes first: the icon
+    // takes only the width the rows have left (a wide typeface or metric units
+    // leave less) and is left out when that would make it too small to read.
+    {
+      const float half  = PlaneIcon_Radius(ac.icon, ac.hasTrack);   // differs by type
+      const int   right = px + pw - 22;
+      const int   cy    = py + 98;
+      float zoom = (float)(right - (rowsRight + 8)) / (2.0f * half);
+      const float zv = (float)(cy - (py + 42)) / half;    // stay below the close button
+      if (zoom > zv)   zoom = zv;
+      if (zoom > 3.0f) zoom = 3.0f;
+      if (zoom >= 1.8f) {
+        float iconTrack = ac.track - (float)s_topDeg;
+        while (iconTrack < 0.0f) iconTrack += 360.0f;
+        PlaneIcon_Draw(right - (int)(half * zoom), cy, iconTrack, ac.hasTrack, ac.icon,
+                       signalLost ? C_GRAY : altColor(ac.altFt, ac.altFt > 0.0f), zoom);
+      }
+    }
 
     // Ask where this flight is going. The position goes with the request: the
     // server uses it to reject a route that does not fit where the aircraft
     // actually is, which is what used to put Athens - Istanbul on an aircraft
     // over Prague. Idempotent - a repeated call with the same aircraft does
     // nothing, and the answer is cached.
-    Route_Select(ac.callsign, ac.lat, ac.lon);
-    const RouteInfo* rt = Route_Get();
+    // Switched off (0.9.1): no lookup and no lines - the route database is
+    // sometimes wrong, and a wrong city is worse than none.
+    const bool showRoute = Settings_ShowRoute();
+    if (showRoute) Route_Select(ac.callsign, ac.lat, ac.lon);
+    const RouteInfo* rt = showRoute ? Route_Get() : nullptr;
 
     // Type and registration share a row - the route below needs two lines and
     // this is where they come from. Both come straight from adsb.fi ("t" and
@@ -704,7 +816,9 @@ void ScreenPlanes_Draw() {
     // "Frankfurt am Main"). Anything that still would not fit is cut and ends
     // with a full stop rather than running over the border.
     const int avail = pw - 36;
-    if (Route_GetState() == ROUTE_WAIT) {
+    if (!showRoute) {
+      // nothing - the two lines stay empty
+    } else if (Route_GetState() == ROUTE_WAIT) {
       gfx->setTextSize(2); gfx->setTextColor(C_GRAY);
       gfx->setCursor(px + 18, ty); gfx->print(T(S_ROUTE_WAIT));
     } else if (rt && (rt->from[0] || rt->to[0])) {
@@ -733,10 +847,9 @@ void ScreenPlanes_Draw() {
       float dkm = s_alertKm;
       Geo_DistBearing(Settings_Lat(), Settings_Lon(), ac.lat, ac.lon, &dkm, nullptr);
       char note[40];
-      const bool en = (Lang_Get() == LANG_EN);
       snprintf(note, sizeof(note), "%s  %.1f km",
-               s_alertWindow ? (en ? "in the window" : CZT("v okne", "v okně"))
-                             : (en ? "nearby" : CZT("nablizku", "nablízku")), dkm);
+               s_alertWindow ? LT("v okne", "v okně", "in the window", "v okne", "v okne")
+                             : LT("nablizku", "nablízku", "nearby", "nablizku", "nablízku"), dkm);
       gfx->setTextSize(1); gfx->setTextColor(C_CYAN);
       gfx->setCursor(px + 18, py + ph - 18);
       gfx->print(note);

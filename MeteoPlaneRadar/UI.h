@@ -12,7 +12,6 @@
 
 // Colours (RGB565)
 #define C_BLACK  0x0000
-#define C_BLUE   0x001F
 #define C_RED    0xF800
 #define C_GREEN  0x07E0
 #define C_WHITE  0xFFFF
@@ -55,6 +54,15 @@ void UI_FillRing(int cx, int cy, int rIn, int rOut, float a0, float a1,
 // nothing when neither is known yet, and refuses to draw text that would not
 // fit inside the circle rather than letting it run off the edge.
 void UI_DrawStatusLine(int cy);
+
+// 0.9.7: what a data screen shows while it has nothing to show. Waiting for
+// WiFi or for the first answer: "Loading...". The last attempt failed:
+// "Source unavailable" and when the next try is - never a "Loading..." that
+// stays up for ever because the server is down.
+struct SrcHealth;
+void UI_NoData(const char* title, const SrcHealth& h);
+// "next try in 4 min" / "retrying now", for the line above.
+void UI_RetryText(const SrcHealth& h, char* out, size_t cap);
 
 // Has that line changed since the last time anyone asked?
 //

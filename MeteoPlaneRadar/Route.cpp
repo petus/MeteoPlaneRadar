@@ -7,6 +7,9 @@
 #include "Route.h"
 #include "Config.h"
 #include "NetSink.h"
+#include "RouteGeo.h"
+#include "Settings.h"
+#include "Status.h"
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -193,16 +196,7 @@ bool Route_TakeChanged() {
 }
 
 // --- Fetching ---------------------------------------------------------------
-// Vzdusna vzdalenost v km. Slouzi jen k porovnavani useku mezi sebou, takze
-// na presnem polomeru Zeme nezalezi.
-static float haversineKm(float lat1, float lon1, float lat2, float lon2) {
-  const float R = 6371.0f, D = 0.017453293f;   // km, stupne -> radiany
-  float dLat = (lat2 - lat1) * D, dLon = (lon2 - lon1) * D;
-  float a = sinf(dLat * 0.5f) * sinf(dLat * 0.5f) +
-            cosf(lat1 * D) * cosf(lat2 * D) * sinf(dLon * 0.5f) * sinf(dLon * 0.5f);
-  if (a < 0) a = 0; else if (a > 1) a = 1;
-  return 2.0f * R * asinf(sqrtf(a));
-}
+static float haversineKm(float a, float b, float c, float d) { return RouteGeo_Km(a, b, c, d); }
 
 // Popisek letiste: mesto ("Prague") se cte lip nez kod, ale u malych letist
 // byva prazdne - pak IATA.
@@ -252,22 +246,25 @@ static int getJson(const char* url, JsonDocument& filter, JsonDocument& doc) {
   return err ? -1001 : HTTP_CODE_OK;
 }
 
-void Route_Tick() {
-  if (!s_pending) return;
-  if (WiFi.status() != WL_CONNECTED) return;
+// =============================================================================
+//  The two sources (0.9.7)
+//
+//  1) adsb.lol - one GET with the callsign and the aircraft's position; the
+//     server says which leg it is and whether it fits ("plausible").
+//  2) adsbdb.com - the other one (see Route_Tick for which goes first). Since
+//     October 2026 adsb.lol's route service often answers 201 with an empty
+//     body or 403, and the display then showed no route at all. adsbdb only
+//     knows what the callsign usually flies, so the fit to the position is
+//     checked here (RouteGeo.h).
+//
+//  0.9.8: whichever answered last is asked first - see Route_Tick().
+// =============================================================================
+enum Res : uint8_t { RES_OK, RES_NONE, RES_FAIL };
 
-  if (!Net_HeapOk("ROUTE")) return;    // zkusi se znovu pristi kolo
-
-  s_pending = false;
-  Entry* e = find(s_wantKey);
-  if (!e) return;
-  // Odsud dal uz kazda cesta zaznam zmeni (vysledek, "neni", nebo zahozeni po
-  // chybe), takze se priznak nastavuje jednou tady a ne ve ctyrech vetvich.
-  // Cely zbytek funkce je synchronni, nez se vrati, je hotovo.
-  s_changed = true;
-
-  // Filtr pousti jen to, co se opravdu pouzije - dokument musi zustat maly.
-  // U pole staci popsat prvni prvek, ArduinoJson ho aplikuje na vsechny.
+// Which source is asked first (0.9.8): the one that last worked. Kept in NVS,
+// so a device whose adsb.lol has been dead for weeks does not wait for its
+// error after every restart.
+static Res askLol(Entry* e, int* httpCode) {
   JsonDocument filter;
   filter["airport_codes"] = true;
   filter["plausible"]     = true;
@@ -279,65 +276,165 @@ void Route_Tick() {
 
   JsonDocument doc;
   char url[160];
-  snprintf(url, sizeof(url), "%s/%s/%.4f/%.4f",
-           ROUTE_API_BASE, s_wantKey, s_wantLat, s_wantLon);
-  int code = getJson(url, filter, doc);
+  snprintf(url, sizeof(url), "%s/%s/%.4f/%.4f", ROUTE_API_BASE, s_wantKey, s_wantLat, s_wantLon);
+  const int code = getJson(url, filter, doc);
+  *httpCode = code;
   if (code != HTTP_CODE_OK) {
-    // Neuspech se NEZAPAMATUJE: zaznam se z kese zahodi misto ulozeni jako
-    // "trasa neni". Server obcas vrati 500 u callsignu, ktery jeste nema
-    // predpocitany (napr. DLH400 mimo cas letu), a zapamatovana chyba by
-    // znamenala, ze uz se na nej do restartu nikdy nezeptame. Takhle se dotaz
-    // zopakuje, jakmile uzivatel detail otevre znovu. Panel zatim neukaze nic.
-    char key[12]; strncpy(key, e->key, sizeof(key)); key[sizeof(key) - 1] = '\0';
-    *e = Entry();
-    Serial.printf("TRASA %s: dotaz selhal (%d)\n", key, code);
-    return;
+    Serial.printf("TRASA %s: adsb.lol selhal (%d)\n", e->key, code);
+    return RES_FAIL;
   }
 
   const char* codes = doc["airport_codes"] | "unknown";
-  // Pri nenalezene trase pole "plausible" v odpovedi vubec neni, takze
-  // vychozi hodnota musi byt false - jinak by neznama trasa prosla jako
-  // verohodna.
-  bool plausible = doc["plausible"] | false;
-
+  // Without a route the "plausible" field is missing altogether, so the
+  // default has to be false - or an unknown route would pass as plausible.
+  const bool plausible = doc["plausible"] | false;
   if (strcmp(codes, "unknown") == 0 || !plausible) {
-    e->state = ROUTE_NONE; e->stamp = millis();
-    Serial.printf("TRASA %s: %s\n", e->key,
-                  strcmp(codes, "unknown") == 0 ? "neni v databazi"
-                                                : "nalezena, ale neverohodna k poloze");
-    return;
+    Serial.printf("TRASA %s: adsb.lol - %s\n", e->key,
+                  strcmp(codes, "unknown") == 0 ? "neni v databazi" : "neverohodna k poloze");
+    return RES_NONE;
   }
-
   JsonArrayConst aps = doc["_airports"].as<JsonArrayConst>();
-  int n = aps.isNull() ? 0 : (int)aps.size();
-  if (n < 2) {
-    // Kody trasy jsou, ale letiste se v databazi nenasla - neni co popsat.
-    e->state = ROUTE_NONE; e->stamp = millis();
-    Serial.printf("TRASA %s: %s (letiste chybi)\n", e->key, codes);
-    return;
-  }
+  const int n = aps.isNull() ? 0 : (int)aps.size();
+  if (n < 2) return RES_NONE;
 
-  // Mezipristani: u vicenohe trasy (napr. "LKPR-LTFM-OMDB") se drive ukazal
-  // prvni odlet a posledni prilet, i kdyz letadlo letelo prostredni usek.
-  // Vezme se ta sousedni dvojice letist, ke ktere je letadlo souhrnne nejbliz.
+  // A multi-leg route ("LKPR-LTFM-OMDB"): the pair of neighbouring airports
+  // the aircraft is nearest to, not the first departure and the last arrival.
   int best = 0;
   if (n > 2) {
     float bestD = 1e30f;
     for (int i = 0; i + 1 < n; i++) {
-      float d = haversineKm(s_wantLat, s_wantLon, aps[i]["lat"] | 0.0f, aps[i]["lon"] | 0.0f) +
-                haversineKm(s_wantLat, s_wantLon, aps[i + 1]["lat"] | 0.0f, aps[i + 1]["lon"] | 0.0f);
+      const float d = haversineKm(s_wantLat, s_wantLon, aps[i]["lat"] | 0.0f, aps[i]["lon"] | 0.0f) +
+                      haversineKm(s_wantLat, s_wantLon, aps[i + 1]["lat"] | 0.0f, aps[i + 1]["lon"] | 0.0f);
       if (d < bestD) { bestD = d; best = i; }
     }
   }
-
   airportLabel(e->info.from, sizeof(e->info.from), aps[best]);
   airportLabel(e->info.to,   sizeof(e->info.to),   aps[best + 1]);
-
-  bool any = (e->info.from[0] || e->info.to[0]);
-  e->state = any ? ROUTE_OK : ROUTE_NONE;
-  e->stamp = millis();   // od ted bezi platnost, viz expired()
-  Serial.printf("TRASA %s: %s -> %s (%s, usek %d/%d)\n", e->key,
-                e->info.from[0] ? e->info.from : "?",
-                e->info.to[0]   ? e->info.to   : "?",
+  if (!e->info.from[0] && !e->info.to[0]) return RES_NONE;
+  Serial.printf("TRASA %s: adsb.lol %s -> %s (%s, usek %d/%d)\n", e->key,
+                e->info.from[0] ? e->info.from : "?", e->info.to[0] ? e->info.to : "?",
                 codes, best + 1, n - 1);
+  return RES_OK;
+}
+
+// adsbdb: the city, or the IATA code, or the airport's name.
+static void dbLabel(char* dst, size_t cap, JsonVariantConst ap) {
+  const char* v = ap["municipality"] | "";
+  if (!*v) v = ap["iata_code"] | "";
+  if (!*v) v = ap["name"] | "";
+  toAscii(dst, cap, v);
+}
+
+static Res askDb(Entry* e, int* httpCode) {
+  JsonDocument filter;
+  JsonObject fr = filter["response"]["flightroute"].to<JsonObject>();
+  for (const char* side : { "origin", "destination" }) {
+    JsonObject o = fr[side].to<JsonObject>();
+    o["municipality"] = true;
+    o["iata_code"]    = true;
+    o["name"]         = true;
+    o["latitude"]     = true;
+    o["longitude"]    = true;
+  }
+  JsonDocument doc;
+  char url[160];
+  snprintf(url, sizeof(url), "%s/%s", ROUTE_DB_BASE, s_wantKey);
+  const int code = getJson(url, filter, doc);
+  *httpCode = code;
+  if (code == 404) {                       // {"response":"unknown callsign"}
+    Serial.printf("TRASA %s: adsbdb - neni v databazi\n", e->key);
+    return RES_NONE;
+  }
+  if (code != HTTP_CODE_OK) {
+    Serial.printf("TRASA %s: adsbdb selhal (%d)\n", e->key, code);
+    return RES_FAIL;
+  }
+  JsonVariantConst o = doc["response"]["flightroute"]["origin"];
+  JsonVariantConst d = doc["response"]["flightroute"]["destination"];
+  if (o.isNull() || d.isNull()) return RES_NONE;
+  const float oLat = o["latitude"] | NAN, oLon = o["longitude"] | NAN;
+  const float dLat = d["latitude"] | NAN, dLon = d["longitude"] | NAN;
+  if (isnan(oLat) || isnan(oLon) || isnan(dLat) || isnan(dLon)) return RES_NONE;
+  if (!RouteGeo_Plausible(s_wantLat, s_wantLon, oLat, oLon, dLat, dLon)) {
+    Serial.printf("TRASA %s: adsbdb - trasa nesedi k poloze letadla\n", e->key);
+    return RES_NONE;
+  }
+  dbLabel(e->info.from, sizeof(e->info.from), o);
+  dbLabel(e->info.to,   sizeof(e->info.to),   d);
+  if (!e->info.from[0] && !e->info.to[0]) return RES_NONE;
+  Serial.printf("TRASA %s: adsbdb %s -> %s\n", e->key, e->info.from, e->info.to);
+  return RES_OK;
+}
+
+static Res ask(uint8_t src, Entry* e, int* code) {
+  e->info = RouteInfo();
+  return src == ROUTE_SRC_DB ? askDb(e, code) : askLol(e, code);
+}
+static const char* srcName(uint8_t src) { return src == ROUTE_SRC_DB ? "adsbdb" : "adsb.lol"; }
+
+void Route_Tick() {
+  if (!s_pending) return;
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  if (!Net_HeapOk("ROUTE")) return;    // zkusi se znovu pristi kolo
+
+  s_pending = false;
+  Entry* e = find(s_wantKey);
+  if (!e) return;
+  // Odsud dal uz kazda cesta zaznam zmeni (vysledek, "neni", nebo zahozeni po
+  // chybe), takze se priznak nastavuje jednou tady.
+  s_changed = true;
+
+  // 0.9.8: "sticky" failover between the two sources.
+  //  - Ask the active one.
+  //  - It FAILS (HTTP error, no connection): ask the other. If the other
+  //    answers at all, it becomes the active one and stays so until it fails.
+  //    If both fail, the other one is active next time anyway - so the two
+  //    take turns rather than the dead one being asked first for ever.
+  //  - It answers but has NO route (or one that does not fit the position):
+  //    ask the other for this one aircraft too, without switching. The other
+  //    failing then changes nothing either.
+  const uint8_t first = Settings_RouteSrc();
+  const uint8_t second = first == ROUTE_SRC_DB ? ROUTE_SRC_LOL : ROUTE_SRC_DB;
+  int c1 = 0, c2 = 0;
+  uint8_t used = first;
+  bool asked2 = false;
+  Res r = ask(first, e, &c1);
+  if (r != RES_OK) {
+    const Res r2 = ask(second, e, &c2);
+    asked2 = true;
+    if (r == RES_FAIL) {
+      Settings_SetRouteSrc(second);      // the active one is down: switch
+      Serial.printf("TRASA: %s nefunguje, aktivni je ted %s\n", srcName(first), srcName(second));
+      r = r2;
+      used = second;
+    } else if (r2 == RES_OK) {           // active had no route, the other one has
+      r = r2;
+      used = second;
+    }
+  }
+
+  // The web status: the result, which source gave it, which one is active,
+  // and what a source that failed answered.
+  char how[64];
+  int l = snprintf(how, sizeof(how), "aktivni %s", srcName(Settings_RouteSrc()));
+  if (c1 != HTTP_CODE_OK && c1 != 404)
+    l += snprintf(how + l, sizeof(how) - l, "; %s %d", srcName(first), c1);
+  if (asked2 && c2 != HTTP_CODE_OK && c2 != 404)
+    snprintf(how + l, sizeof(how) - l, "; %s %d", srcName(second), c2);
+  if (r == RES_OK)
+    Status_Set(ST_ROUTE, "%s: %s -> %s (%s; %s)", e->key, e->info.from, e->info.to, srcName(used), how);
+  else if (r == RES_NONE)
+    Status_Set(ST_ROUTE, "%s: trasa neznama nebo nesedi k poloze (%s)", e->key, how);
+  else
+    Status_Set(ST_ROUTE, "%s: zdroje neodpovidaji (%s)", e->key, how);
+
+  if (r == RES_FAIL) {
+    // Neuspech se NEZAPAMATUJE: zaznam se z kese zahodi, at se dotaz zopakuje,
+    // az uzivatel detail otevre znovu. Panel zatim neukaze nic.
+    *e = Entry();
+    return;
+  }
+  e->state = (r == RES_OK) ? ROUTE_OK : ROUTE_NONE;
+  e->stamp = millis();   // od ted bezi platnost, viz expired()
 }

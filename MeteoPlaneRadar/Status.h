@@ -21,6 +21,9 @@ enum StatusSlot : uint8_t {
   ST_MIX,          // generation mix
   ST_STORM,        // storm watch (0.8.0)
   ST_PLANEWATCH,   // aircraft-nearby watch (0.8.0)
+  ST_FX,           // exchange rates (0.9.6)
+  ST_CRYPTO,       // cryptocurrencies (0.9.7)
+  ST_ROUTE,        // the last flight route lookup (0.9.7)
   ST_COUNT
 };
 

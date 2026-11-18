@@ -52,3 +52,9 @@ long Net_ScanBody(HTTPClient& http, NetScanFn cb, void* user, const char* tag,
 // mbedTLS and surfaces as a bare "HTTP -1", so callers check first and skip the
 // poll, leaving the previous data on screen.
 bool Net_HeapOk(const char* tag);
+
+// 0.9.2: the tag of the body being read right now (nullptr between reads). The
+// stuck-loop guard (Watchdog_PollFeed) writes it down before it lets the
+// watchdog restart the board, so the next boot can say what hung.
+void        Net_SetActivity(const char* what);
+const char* Net_Activity();

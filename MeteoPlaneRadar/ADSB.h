@@ -59,7 +59,6 @@ bool   ADSB_DataStale();              // older than ADSB_STALE_MS
 bool   ADSB_DataHidden();             // older than ADSB_HIDE_MS (or none yet)
 // > 0 while the gate is closed: ms until the next request is allowed.
 unsigned long ADSB_PauseLeftMs();
-int    ADSB_LastHttpCode();           // last HTTP status (0 = no answer at all)
 
 int    ADSB_Count();
 const Aircraft* ADSB_List();

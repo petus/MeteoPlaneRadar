@@ -25,5 +25,12 @@ enum WxKind : uint8_t {
 // instead of a sun where the icon has one.
 void WxIcon_Draw(int cx, int cy, int r, int wmoCode, bool night);
 
+// 0.9.7: the Moon as it looks tonight - phase 0 new, 0.25 first quarter,
+// 0.5 full, 0.75 last quarter. south = southern hemisphere, where the lit
+// side is the other one.
+void WxIcon_Moon(int cx, int cy, int r, double phase, bool south);
+// A small up (rise) or down (set) triangle, w px wide, centred on cy.
+void WxIcon_RiseSet(int x, int cy, int w, bool up);
+
 // A colour that suits the condition - used for the temperature next to it.
 uint16_t WxIcon_Color(int wmoCode);

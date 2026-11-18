@@ -12,6 +12,7 @@
 #include "Outside.h"
 #include "Layout.h"
 #include "Lang.h"
+#include "SrcHealth.h"
 #include "UI.h"
 #include "Display_ST7701.h"
 #include "Config.h"
@@ -32,6 +33,7 @@
 
 // Hour labels sit inside the ring, where there is nothing else.
 #define R_LABEL 116
+#define HOUR_DOT_R 8     // hour dots: this far inside R_IN (0.9.4)
 
 // The middle. Read top to bottom: which day, the price, its unit, the min and
 // max hour of that day, what the number includes, and what a gesture will do.
@@ -185,23 +187,22 @@ static void drawRing() {
     fillSector(slotAngle(i), slotAngle(i + 1), R_IN, R_OUT, priceColor(p, lo, hi));
   }
 
-  // A short black notch on the outer edge at every full hour. This is what
-  // stops the ring reading as a smear: you can count round to the hour you
-  // care about without the notches cutting the colour band in half.
+  // The hours as small dots just inside the ring (0.9.4) - bigger and lighter
+  // at 0, 6, 12 and 18. They used to be black notches cut into the colour,
+  // which read as thin black lines through the band.
   for (int h = 0; h < 24; h++) {
     const float a = slotAngle(h * PRICE_PER_HOUR);
-    const float c = cosf(a), s = sinf(a);
-    gfx->drawLine(CX + (int)((R_OUT - 7) * c), CY + (int)((R_OUT - 7) * s),
-                  CX + (int)((R_OUT + 1) * c), CY + (int)((R_OUT + 1) * s), C_BLACK);
+    const bool quarter = (h % 6 == 0);
+    gfx->fillCircle(CX + (int)lroundf((R_IN - HOUR_DOT_R) * cosf(a)),
+                    CY + (int)lroundf((R_IN - HOUR_DOT_R) * sinf(a)),
+                    quarter ? 3 : 1, quarter ? C_GRAY : C_DKGRAY);
   }
 
-  // Quarter marks, drawn over the sectors so they survive whatever colour is
-  // underneath. These are what turn a ring of colour into a readable dial.
+  // The labels at 0, 6, 12 and 18 (their black lines across the band went in
+  // 0.9.4 - the bigger dots above mark them).
   for (int h = 0; h < 24; h += 6) {
     const float a = slotAngle(h * PRICE_PER_HOUR);
     const float c = cosf(a), s = sinf(a);
-    gfx->drawLine(CX + (int)((R_IN - 4) * c), CY + (int)((R_IN - 4) * s),
-                  CX + (int)((R_OUT + 4) * c), CY + (int)((R_OUT + 4) * s), C_BLACK);
     char lbl[4];
     snprintf(lbl, sizeof(lbl), "%d", h);
     const int w = Layout_TextW(lbl, 2);
@@ -305,7 +306,7 @@ static void drawCentre() {
   // The unit, and - when the middle is NOT showing the current hour - which
   // hour it is showing. A big number with no hour next to it would be read as
   // the price right now, which on tomorrow's dial is simply wrong.
-  if (isNow || showSlot < 0) snprintf(buf, sizeof(buf), "%s", CZT("Kc/kWh", "Kč/kWh"));
+  if (isNow || showSlot < 0) snprintf(buf, sizeof(buf), "%s", CZT("Kc/kWh", "Kč/kWh"));   // Czech prices in either language
   else snprintf(buf, sizeof(buf), "%s  %02d:%02d", CZT("Kc/kWh", "Kč/kWh"),
                 Price_SlotHour(showSlot), Price_SlotMinute(showSlot));
   Layout_ReserveTextCentered(buf, 1, CX, UNIT_Y);
@@ -382,9 +383,7 @@ void ScreenPrice_Draw() {
   }
 
   if (!Energy_PriceValid()) {
-    UI_TextCentered(T(S_PRICE), CY - 20, C_WHITE, 2);
-    UI_TextCentered(WiFi.status() == WL_CONNECTED ? T(S_LOADING) : T(S_WIFI_WAIT),
-                    CY + 10, C_YELLOW, 2);
+    UI_NoData(T(S_PRICE), Energy_PriceHealth());   // 0.9.7: not "Loading..." for ever
     return;
   }
 

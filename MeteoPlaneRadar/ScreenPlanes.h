@@ -36,4 +36,3 @@ bool ScreenPlanes_DetailOpen();
 // user's own range back. A swipe during the alert ends alert mode by itself.
 void ScreenPlanes_AlertBegin(const char* hex, float distKm, bool inWindow);
 void ScreenPlanes_AlertEnd();
-bool ScreenPlanes_AlertActive();

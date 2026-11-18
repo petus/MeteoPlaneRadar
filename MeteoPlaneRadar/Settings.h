@@ -52,7 +52,6 @@ void   Settings_SetLocation(double lat, double lon);
 uint8_t Settings_Backlight();          // the level in force right now
 void    Settings_SetBacklight(uint8_t pct);   // sets the ACTIVE level
 uint8_t Settings_BrightDay();
-uint8_t Settings_BrightNight();
 void    Settings_SetBrightDay(uint8_t pct);
 void    Settings_SetBrightNight(uint8_t pct);
 bool    Settings_NightAuto();
@@ -64,17 +63,39 @@ void    Settings_SetNightOffsetMin(int8_t m);
 bool    Settings_IsNight();
 void    Settings_SetNight(bool night);
 
+// 0.9.2: with the automatic switch on, night follows either the sun (with the
+// offset above) or a clock window. Windows are minutes of the day; one that
+// crosses midnight (22:00 - 6:00) is fine, from == to means "never".
+uint8_t  Settings_NightSource();               // NIGHT_SRC_*
+void     Settings_SetNightSource(uint8_t s);
+uint16_t Settings_NightFromMin();
+uint16_t Settings_NightToMin();
+void     Settings_SetNightWindow(uint16_t from, uint16_t to);
+// 0.9.2: the display switched off (backlight at 0) for a window of its own. A
+// touch lights it for a while; an alert too, if darkAlerts.
+bool     Settings_DarkOn();
+void     Settings_SetDarkOn(bool on);
+uint16_t Settings_DarkFromMin();
+uint16_t Settings_DarkToMin();
+void     Settings_SetDarkWindow(uint16_t from, uint16_t to);
+bool     Settings_DarkAlerts();
+void     Settings_SetDarkAlerts(bool on);
+// 0.9.2: the name day on the clock - Czech and Slovak calendars, not English.
+bool     Settings_NameDay();
+void     Settings_SetNameDay(bool on);
+// 0.9.3: clock screen layout, CLOCK_LAYOUT_* (A basic, C sun, D next hours).
+uint8_t  Settings_ClockLayout();
+void     Settings_SetClockLayout(uint8_t l);
+
 // --- Units, language --------------------------------------------------------
 bool    Settings_MetricUnits();
 void    Settings_SetMetricUnits(bool metric);
-uint8_t Settings_Language();               // LANG_CZ / LANG_EN
 void    Settings_SetLanguage(uint8_t l);
 
 // --- Screens ----------------------------------------------------------------
 // idx is SCREEN_CLOCK_I .. SCREEN_FORECAST_I. Settings is always enabled.
 bool    Settings_ScreenEnabled(uint8_t idx);
 void    Settings_SetScreenEnabled(uint8_t idx, bool on);
-uint8_t Settings_EnabledCount();           // data screens currently on
 // Automatic screen cycling, in SECONDS. 0 = off.
 //
 // This was minutes up to 0.6.0 and is stored under a NEW key, because
@@ -83,10 +104,15 @@ uint8_t Settings_EnabledCount();           // data screens currently on
 uint16_t Settings_AutoRotateSec();
 void     Settings_SetAutoRotateSec(uint16_t s);
 
+// 0.9.1: the screen dots at the top disappear this many seconds after a switch
+// (or a touch) and come back with the next one. 0 = always shown, the old
+// behaviour and the default, so an update changes nothing by itself.
+uint8_t  Settings_DotsHideSec();
+void     Settings_SetDotsHideSec(uint8_t s);
+
 // --- Weather radar ----------------------------------------------------------
 uint8_t Settings_RadarSource();            // RADAR_SRC_CHMU / _RAINVIEWER / _CHMU_MASKED
 void    Settings_SetRadarSource(uint8_t s);
-bool    Settings_RadarIsChmu();            // either of the two CHMU variants
 
 // --- Storm watch (0.8.0) ----------------------------------------------------
 // With StormOnly on, the weather radar is left out of the automatic cycling
@@ -108,10 +134,17 @@ uint16_t Settings_PlaneAlertKm();
 void     Settings_SetPlaneAlertKm(uint16_t km);
 uint16_t Settings_PlaneAlertSec();
 void     Settings_SetPlaneAlertSec(uint16_t s);
+// 0.9.9: what the alert shows. The detail at once (default, as before 0.9.8),
+// the radar first with the aircraft marked and then its detail, or the radar
+// only. 0.9.8 had the first and the last as a checkbox ("paDet").
+#define PA_MODE_DETAIL       0
+#define PA_MODE_RADAR_DETAIL 1
+#define PA_MODE_RADAR        2
+uint8_t  Settings_PlaneAlertMode();
+void     Settings_SetPlaneAlertMode(uint8_t m);
 bool     Settings_WindowOn();
 void     Settings_SetWindowOn(bool on);
-uint16_t Settings_WindowAz();              // bearing of the centre, 0..359
-void     Settings_SetWindowAz(uint16_t deg);
+uint16_t Settings_WindowAz();              // = Settings_TopBearing() since 0.8.6
 uint16_t Settings_WindowWidth();           // full width of the view, degrees
 void     Settings_SetWindowWidth(uint16_t deg);
 uint16_t Settings_WindowKm();
@@ -125,6 +158,43 @@ void     Settings_SetHaEnabled(bool on);
 // heart and would rather see the map underneath it.
 bool    Settings_MeteoLegend();
 void    Settings_SetMeteoLegend(bool on);
+// 0.9.1: the "from / to" lines in the aircraft detail. The route comes from a
+// public database keyed by callsign, and a callsign reused on another leg gives
+// a route that is not true - so it can be switched off. Off also means the
+// lookup is not made at all.
+bool    Settings_ShowRoute();
+void    Settings_SetShowRoute(bool on);
+
+// --- 3D printer watch (0.9.0) -----------------------------------------------
+// One printer. The host is an IP address, optionally with :port. The secrets
+// (Prusa password, API key) are stored in NVS, which is NOT encrypted. They are
+// never part of the config JSON - the page only learns whether one is set - and
+// go into the export / come from an import only with Settings_PrintExport().
+bool        Settings_PrintOn();
+void        Settings_SetPrintOn(bool on);
+uint8_t     Settings_PrintType();            // PRINT_TYPE_*
+void        Settings_SetPrintType(uint8_t t);
+const char* Settings_PrintHost();
+void        Settings_SetPrintHost(const char* h);
+const char* Settings_PrintUser();            // Prusa digest user (not secret)
+void        Settings_SetPrintUser(const char* u);
+const char* Settings_PrintKey();             // API key, "" = none
+const char* Settings_PrintPass();            // Prusa password, "" = none
+void        Settings_SetPrintKey(const char* k);   // "" leaves it unchanged
+void        Settings_SetPrintPass(const char* p);  // "" leaves it unchanged
+void        Settings_ForgetPrintSecrets();   // RAM and NVS
+// Whether the password and API key go into the settings export and are taken
+// from an import. They are stored in NVS either way.
+bool        Settings_PrintExport();
+void        Settings_SetPrintExport(bool on);
+bool        Settings_PrintAlertFinish();
+bool        Settings_PrintAlertError();
+bool        Settings_PrintAlertPause();
+void        Settings_SetPrintAlerts(bool finish, bool error, bool pause);
+uint8_t     Settings_PrintNight();           // PRINT_NIGHT_*
+void        Settings_SetPrintNight(uint8_t m);
+// Bumped by every setter above, so the watch task can tell its copy is stale.
+uint32_t    Settings_PrintGen();
 
 // --- Energy -----------------------------------------------------------------
 //
@@ -149,6 +219,43 @@ void     Settings_SetPriceVat(uint8_t pct);
 // minutes.
 const char* Settings_MixCountry();
 void        Settings_SetMixCountry(const char* code);
+
+// Flight route source asked first (0.9.8): the one that last worked. Device
+// state, not a setting - not in the web page or the export.
+#define ROUTE_SRC_LOL 0
+#define ROUTE_SRC_DB  1
+uint8_t Settings_RouteSrc();
+void    Settings_SetRouteSrc(uint8_t src);
+
+// --- Exchange rates (0.9.6) -------------------------------------------------
+// The currencies the device knows: what can be a home currency (one the source
+// can answer for) and what can be watched. Codes are ISO 4217, upper case.
+#define FX_HOMES   "CZK EUR PLN HUF CHF GBP DKK SEK NOK RON USD"
+#define FX_CODES   "EUR USD GBP CHF PLN HUF CZK JPY CNY DKK SEK NOK RON TRY CAD AUD"
+// Home currency as stored: "" = automatic, otherwise one of FX_HOMES.
+void        Settings_SetFxHome(const char* code);   // "" or unknown -> automatic
+// The one actually used: the stored one, or the automatic choice - Czech ->
+// CZK, Slovak -> EUR, English -> the currency of the mix country (EUR when it
+// has none the sources know).
+const char* Settings_FxHomeEff();
+// Watched currencies as stored: "EUR,USD,GBP" or "" = the default for the home
+// currency. Unknown codes and duplicates are dropped, at most FX_MAX kept.
+void        Settings_SetFxList(const char* csv);
+// The currencies to show, home currency left out: the stored list, or the
+// default for the home currency. Returns how many were written to out.
+int         Settings_FxCodesEff(char out[][4], int max);
+
+// --- Cryptocurrencies (0.9.7) -----------------------------------------------
+// The coins on offer, by symbol; Settings_CryptoId() gives CoinGecko's id.
+#define CR_CODES   "BTC ETH SOL XRP BNB ADA DOGE TRX LTC DOT LINK USDT"
+const char* Settings_CryptoId(const char* sym);     // nullptr when unknown
+// As stored: "BTC,ETH" or "" = default (BTC, ETH, SOL, XRP).
+void        Settings_SetCryptoList(const char* csv);
+int         Settings_CryptoCodesEff(char out[][6], int max);
+// Optional CoinGecko Demo API key. Never sent back to the page and not part
+// of an export - only whether one is set.
+const char* Settings_CgKey();
+void        Settings_SetCgKey(const char* key);   // "" clears it
 
 // --- Clock appearance -------------------------------------------------------
 uint8_t  Settings_SecondsStyle();          // SEC_STYLE_*

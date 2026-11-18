@@ -26,6 +26,7 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <ESPmDNS.h>
+#include "PrintWatch.h"
 #include <ArduinoJson.h>
 #include <Update.h>
 #include <esp_heap_caps.h>
@@ -44,6 +45,7 @@
 // Defined in the .ino - the screen actually on the display.
 extern int  MPR_CurrentScreen();
 extern bool MPR_AlertActive();
+extern bool MPR_PrintAlertActive();
 
 static WebServer  s_srv(WEB_PORT);
 static DNSServer  s_dns;
@@ -51,6 +53,19 @@ static bool s_apMode = false;
 static bool s_running = false;
 static bool s_wantConnect = false;
 static bool s_wantRestart = false;
+
+// 0.9.8: settings that need a restart - the location, the radar source and the
+// set of screens - are no longer waiting for a Save button. The page sends them
+// the moment they change, like everything else, and they wait HERE, in RAM,
+// untouched by the running firmware (which still has the old state cached).
+// They are written and the device restarts when the user presses "Restart now"
+// on the page, or by itself RESTART_DELAY_MS after the last such change - so a
+// change is never left hanging until the next power cut, and ticking five
+// boxes in a row still costs one restart.
+#define RESTART_DELAY_MS 120000UL
+static JsonDocument  s_pend;             // lat, lon, radarSrc, screens{...}
+static bool          s_pendOn = false;
+static unsigned long s_pendAt = 0;       // millis() of the last such change
 static volatile bool s_updating = false;
 
 // Queued remote-control requests - see the note in WebConfig.h.
@@ -79,15 +94,98 @@ static bool readBody(JsonDocument& doc) {
   return deserializeJson(doc, s_srv.arg("plain")) == DeserializationError::Ok;
 }
 
-// The set of enabled data screens as one value, so "did this change?" is one
-// comparison. Built from the loop rather than written out screen by screen -
-// the hand-written version had to be edited in two places every time a screen
-// was added, and was quietly wrong for the two energy screens until it was not.
-static uint8_t screenMask() {
-  uint8_t m = 0;
-  for (uint8_t i = 0; i < SCREEN_SETTINGS_I && i < 8; i++)
-    if (Settings_ScreenEnabled(i)) m |= (uint8_t)(1u << i);
-  return m;
+// The screens by the names the page and the JSON use.
+static const struct { const char* key; uint8_t idx; } SCR_KEYS[] = {
+  { "clock",    SCREEN_CLOCK_I },  { "planes", SCREEN_PLANES_I }, { "meteo", SCREEN_METEO_I },
+  { "forecast", SCREEN_FORECAST_I }, { "price", SCREEN_PRICE_I }, { "mix",   SCREEN_MIX_I },
+  { "print",    SCREEN_PRINT_I },  { "fx",     SCREEN_FX_I },     { "crypto", SCREEN_CRYPTO_I },
+};
+
+// Does anything held back differ from what the device runs with? Ticking a
+// box and unticking it again leaves nothing to restart for.
+static bool pendDiffers() {
+  JsonObjectConst p = s_pend.as<JsonObjectConst>();
+  if (!p["lat"].isNull() && fabs(p["lat"].as<double>() - Settings_Lat()) > 1e-6) return true;
+  if (!p["lon"].isNull() && fabs(p["lon"].as<double>() - Settings_Lon()) > 1e-6) return true;
+  if (!p["radarSrc"].isNull() && p["radarSrc"].as<uint8_t>() != Settings_RadarSource()) return true;
+  JsonObjectConst scr = p["screens"];
+  if (!scr.isNull())
+    for (auto& m : SCR_KEYS) {
+      JsonVariantConst v = scr[m.key];
+      if (!v.isNull() && v.as<bool>() != Settings_ScreenEnabled(m.idx)) return true;
+    }
+  return false;
+}
+
+// Seconds until the device restarts by itself; 0 = nothing waiting.
+static uint32_t pendLeftS() {
+  if (!s_pendOn) return 0;
+  const unsigned long gone = millis() - s_pendAt;
+  return gone >= RESTART_DELAY_MS ? 1 : (uint32_t)((RESTART_DELAY_MS - gone + 999) / 1000);
+}
+
+// Write what was held back and ask the loop for a restart.
+static void applyPending() {
+  if (!s_pendOn) return;
+  s_pendOn = false;
+  const double oldLat = Settings_Lat(), oldLon = Settings_Lon();
+  Settings_FromJson(s_pend.as<JsonObjectConst>());
+  s_pend.clear();
+  const bool moved = (fabs(oldLat - Settings_Lat()) > 1e-6) ||
+                     (fabs(oldLon - Settings_Lon()) > 1e-6);
+  if (moved) {
+    Forecast_Invalidate();
+    Energy_Invalidate();
+
+    // Moving the device out of the area a source covers switches that screen
+    // off, ONCE, at the moment the location changes. Not a permanent lock: the
+    // checkbox is still there and turning it back on sticks, which matters
+    // because the boxes in Config.h are rectangles and somebody just over the
+    // border may well want Czech prices on purpose.
+    //
+    // Doing it here rather than in the drawing code is deliberate. A screen
+    // that shows "not available here" every time the cycling reaches it is a
+    // screen that has to be switched off by hand anyway; the device may as well
+    // do the obvious thing and say so in the log.
+    if (!Energy_PriceInArea() && Settings_ScreenEnabled(SCREEN_PRICE_I)) {
+      Settings_SetScreenEnabled(SCREEN_PRICE_I, false);
+      Serial.println("Poloha mimo CR: vypinam obrazovku s cenou elektriny");
+    }
+    if (!Energy_MixInArea() && Settings_ScreenEnabled(SCREEN_MIX_I)) {
+      Settings_SetScreenEnabled(SCREEN_MIX_I, false);
+      Serial.println("Poloha mimo Evropu: vypinam obrazovku s vyrobou");
+    }
+    // Still on the Czech default after moving abroad? Europe as a whole is a
+    // better guess than a country the user does not live in. An explicit choice
+    // is left alone.
+    if (!Energy_PriceInArea() && Energy_MixInArea() &&
+        !strcmp(Settings_MixCountry(), MIX_COUNTRY_DEFAULT)) {
+      Settings_SetMixCountry("eu");
+      Serial.println("Poloha mimo CR: mix prepnut na celou Evropu");
+    }
+  }
+  // These reach too far into cached state (decoded radar frames, allocated
+  // buffers, which screen is even reachable) to be worth unpicking at runtime.
+  // A restart is a second and a half and guarantees a clean result.
+  s_wantRestart = true;
+}
+
+// What the page should show: the held-back values over the running ones, and
+// how long until the restart.
+static void pendOverlay(JsonObject o) {
+  if (s_pendOn) {
+    JsonObjectConst p = s_pend.as<JsonObjectConst>();
+    if (!p["lat"].isNull())      o["lat"] = p["lat"];
+    if (!p["lon"].isNull())      o["lon"] = p["lon"];
+    if (!p["radarSrc"].isNull()) o["radarSrc"] = p["radarSrc"];
+    JsonObjectConst scr = p["screens"];
+    if (!scr.isNull()) {
+      JsonObject os = o["screens"];
+      for (JsonPairConst kv : scr) os[kv.key()] = kv.value();
+    }
+  }
+  o["restartPending"] = s_pendOn;
+  o["restartIn"] = pendLeftS();
 }
 
 // Every destructive endpoint goes through here. When no password is set this
@@ -123,6 +221,7 @@ static void handleGetConfig() {
       e["hasPass"] = Settings_WifiPass(i)[0] != '\0';
     }
   }
+  pendOverlay(o);
   o["version"] = FW_VERSION;
   o["apMode"]  = s_apMode;
   o["ip"]      = s_apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
@@ -133,78 +232,45 @@ static void handlePostConfig() {
   JsonDocument doc;
   if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
 
-  // The password is write-only and never round-trips through the page, so it is
-  // handled apart from the rest of the settings.
-  //
-  // Changing it requires the current one. Without that check anyone who can
-  // reach the page could set a password and lock the owner out of the update
-  // and reset endpoints - the settings themselves are deliberately open, but
-  // that must not be a way to take the device over.
-  JsonVariantConst np = doc["newPassword"];
-  if (!np.isNull()) {
-    const char* p = np.as<const char*>();
-    if (p && *p) {
-      if (!authed(doc)) return;                 // sends 403 and explains itself
-      Settings_SetAdminPassword(p);
-      // The update page checks the password on every request, so a new one is
-      // live immediately - no restart needed.
-    }
+  // 0.8.6: the admin password is NOT changed here any more - see
+  // handlePassword(). A "newPassword" or "password" key in the body is ignored.
+
+  // 0.9.8: the restart-bound keys are taken out and held back (see s_pend).
+  JsonObject in = doc.as<JsonObject>();
+  bool held = false;
+  for (const char* k : { "lat", "lon", "radarSrc" }) {
+    if (!in[k].isNull()) { s_pend[k] = in[k]; in.remove(k); held = true; }
+  }
+  if (!in["screens"].isNull()) {
+    JsonObject ps = s_pend["screens"].is<JsonObject>() ? s_pend["screens"].as<JsonObject>()
+                                                      : s_pend["screens"].to<JsonObject>();
+    for (JsonPair kv : in["screens"].as<JsonObject>()) ps[kv.key()] = kv.value();
+    in.remove("screens");
+    held = true;
+  }
+  if (held) {
+    s_pendOn = pendDiffers();
+    if (s_pendOn) s_pendAt = millis();
+    else          s_pend.clear();
   }
 
-  const double oldLat = Settings_Lat(), oldLon = Settings_Lon();
-  const uint8_t oldSrc = Settings_RadarSource();
-  const uint8_t oldMask = screenMask();
-
   Settings_FromJson(doc.as<JsonObjectConst>());
+
+  // 0.9.0: the printer's secrets come in here (and through an import with
+  // printExport on) - not through Settings_FromJson.
+  // Empty means "leave it as it is"; printForget wipes both.
+  if (doc["printForget"] | false) Settings_ForgetPrintSecrets();
+  Settings_SetPrintKey(doc["printKey"] | "");
+  Settings_SetPrintPass(doc["printPass"] | "");
 
   // Applied straight away - these are the ones you want to see change while
   // you are still looking at the slider.
   NightMode_Apply();
 
-  const uint8_t newMask = screenMask();
-  const bool moved = (fabs(oldLat - Settings_Lat()) > 1e-6) ||
-                     (fabs(oldLon - Settings_Lon()) > 1e-6);
-  if (moved) {
-    Forecast_Invalidate();
-    Energy_Invalidate();
-
-    // Moving the device out of the area a source covers switches that screen
-    // off, ONCE, at the moment the location changes. Not a permanent lock: the
-    // checkbox is still there and turning it back on sticks, which matters
-    // because the boxes in Config.h are rectangles and somebody just over the
-    // border may well want Czech prices on purpose.
-    //
-    // Doing it here rather than in the drawing code is deliberate. A screen
-    // that shows "not available here" every time the cycling reaches it is a
-    // screen that has to be switched off by hand anyway; the device may as well
-    // do the obvious thing and say so in the log.
-    if (!Energy_PriceInArea() && Settings_ScreenEnabled(SCREEN_PRICE_I)) {
-      Settings_SetScreenEnabled(SCREEN_PRICE_I, false);
-      Serial.println("Poloha mimo CR: vypinam obrazovku s cenou elektriny");
-    }
-    if (!Energy_MixInArea() && Settings_ScreenEnabled(SCREEN_MIX_I)) {
-      Settings_SetScreenEnabled(SCREEN_MIX_I, false);
-      Serial.println("Poloha mimo Evropu: vypinam obrazovku s vyrobou");
-    }
-    // Still on the Czech default after moving abroad? Europe as a whole is a
-    // better guess than a country the user does not live in. An explicit choice
-    // is left alone.
-    if (!Energy_PriceInArea() && Energy_MixInArea() &&
-        !strcmp(Settings_MixCountry(), MIX_COUNTRY_DEFAULT)) {
-      Settings_SetMixCountry("eu");
-      Serial.println("Poloha mimo CR: mix prepnut na celou Evropu");
-    }
-  }
-
-  // These reach too far into cached state (decoded radar frames, allocated
-  // buffers, which screen is even reachable) to be worth unpicking at runtime.
-  // A restart is a second and a half and guarantees a clean result.
-  if (moved || oldSrc != Settings_RadarSource() || oldMask != newMask)
-    s_wantRestart = true;
-
   JsonDocument res;
   res["ok"] = true;
-  res["restart"] = s_wantRestart;
+  res["restartPending"] = s_pendOn;
+  res["restartIn"] = pendLeftS();
   sendJson(200, res);
 }
 
@@ -251,6 +317,7 @@ static void handleStatus() {
   // picture rolls or the touch is dead. A "?" means detection fell back.
   doc["board"] = Board_Detected() ? Board_Name() : "? -> " + String(Board_Name());
   doc["ip"]   = s_apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+  doc["restartIn"] = pendLeftS();        // 0.9.8: 0 = nothing waiting
   doc["ssid"] = s_apMode ? String(AP_SSID) : WiFi.SSID();
   doc["rssi"] = s_apMode ? 0 : WiFi.RSSI();
 
@@ -274,6 +341,12 @@ static void handleStatus() {
     case ESP_RST_BROWNOUT: rr = "BROWNOUT"; break;
     case ESP_RST_EXT:      rr = "reset pin"; break;
     default: break;
+  }
+  // 0.9.2: a watchdog restart the stuck-loop guard caused says what hung.
+  if (const char* w = Watchdog_StuckWhat()) {
+    static char rb[48];
+    snprintf(rb, sizeof(rb), "WATCHDOG (zaseknute: %s)", w);
+    rr = rb;
   }
   doc["resetReason"] = rr;
 
@@ -313,6 +386,22 @@ static void handleStatus() {
   Status_Text(ST_MIX, b, sizeof(b));      doc["mix"] = b;
   Status_Text(ST_STORM, b, sizeof(b));    doc["storm"] = b;
   Status_Text(ST_PLANEWATCH, b, sizeof(b)); doc["planeWatch"] = b;
+  Status_Text(ST_FX, b, sizeof(b));       doc["fx"] = b;          // 0.9.6
+  Status_Text(ST_CRYPTO, b, sizeof(b));   doc["crypto"] = b;      // 0.9.7
+  Status_Text(ST_ROUTE, b, sizeof(b));    doc["route"] = b;       // 0.9.7
+  PrintWatch_StatusText(b, sizeof(b));    doc["printWatch"] = b;
+  {
+    PrintInfo pi;
+    PrintWatch_Get(&pi);
+    JsonObject p = doc["print"].to<JsonObject>();
+    p["state"] = PrintState_Name(pi.state);
+    if (pi.pct >= 0) p["pct"] = (int)lroundf(pi.pct);
+    if (pi.remainS >= 0) p["remain_s"] = pi.remainS;
+    if (pi.elapsedS >= 0) p["elapsed_s"] = pi.elapsedS;
+    if (pi.file[0]) p["file"] = pi.file;
+    if (pi.material[0]) p["material"] = pi.material;
+    if (pi.nextPollMs) p["next_s"] = (long)(pi.nextPollMs - millis()) / 1000;
+  }
   sendJson(200, doc);
 }
 
@@ -342,7 +431,7 @@ static void handleWifiList() {
 // Home Assistant: the shape follows the documented REST sensor, but nobody has
 // pointed one at it yet.
 static const char* const SCREEN_KEYS[SCREEN_N] = {
-  "clock", "planes", "meteo", "forecast", "price", "mix", "settings" };
+  "clock", "planes", "meteo", "forecast", "price", "mix", "settings", "print", "fx", "crypto" };
 
 static void handleHa() {
   if (!Settings_HaEnabled()) {
@@ -444,6 +533,27 @@ static void handleHa() {
   }
   if (Energy_MixValid()) doc["renewable_pct"] = roundf(Energy_RenewableShare() * 10) / 10;
 
+  // 3D printer (0.9.0). Only when a printer is set up.
+  if (Settings_PrintOn()) {
+    PrintInfo pi;
+    PrintWatch_Get(&pi);
+    JsonObject p = doc["print"].to<JsonObject>();
+    p["state"]     = PrintState_Name(pi.state);
+    p["online"]    = PrintState_Online(pi.state);
+    p["printing"]  = PrintState_Active(pi.state);
+    p["alert"]     = MPR_PrintAlertActive();
+    if (pi.pct >= 0) p["progress"] = roundf(pi.pct * 10) / 10; else p["progress"] = nullptr;
+    if (pi.remainS >= 0) p["remaining_s"] = pi.remainS; else p["remaining_s"] = nullptr;
+    if (pi.elapsedS >= 0) p["elapsed_s"] = pi.elapsedS; else p["elapsed_s"] = nullptr;
+    p["file"]      = pi.file;
+    p["material"]  = pi.material;
+    if (isfinite(pi.tNoz)) p["nozzle_c"] = roundf(pi.tNoz * 10) / 10; else p["nozzle_c"] = nullptr;
+    if (isfinite(pi.tBed)) p["bed_c"] = roundf(pi.tBed * 10) / 10;    else p["bed_c"] = nullptr;
+    if (pi.layer >= 0) p["layer"] = pi.layer;
+    if (pi.layers > 0) p["layers"] = pi.layers;
+    p["message"]   = pi.message;
+  }
+
   sendJson(200, doc);
 }
 
@@ -488,7 +598,7 @@ static void handleGeocode() {
 
   char url[220];
   snprintf(url, sizeof(url), "%s?name=%s&count=8&language=%s&format=json",
-           GEOCODE_URL, enc.c_str(), Lang_Get() == LANG_EN ? "en" : "cs");
+           GEOCODE_URL, enc.c_str(), Lang_Code());
 
   String body;
   if (!Net_GetString(url, body, "GEOKOD")) { s_srv.send(502, "application/json", "[]"); return; }
@@ -514,17 +624,33 @@ static void handleGeocode() {
   sendJson(200, out);
 }
 
-static void handleExport() {
+// GET: the plain export, never with the printer's secrets - a link anyone on
+// the network can open. POST {password}: the same behind the admin password,
+// and with the printer's password and API key when "printExport" is ticked.
+static void sendExport(bool secrets) {
   JsonDocument doc;
   JsonObject o = doc.to<JsonObject>();
   Settings_ToJson(o);
   o["version"] = FW_VERSION;
-  // Deliberately absent: the WiFi password and the admin password. A backup
-  // file ends up in a download folder, in an email, in a support ticket.
+  // Never in it: the WiFi passwords and the admin password. A backup file ends
+  // up in a download folder, in an email, in a support ticket.
+  // The printer's secrets only when the user asked for them (0.9.0).
+  if (secrets && Settings_PrintExport()) {
+    o["printKey"]  = Settings_PrintKey();
+    o["printPass"] = Settings_PrintPass();
+  }
   String out;
   serializeJsonPretty(doc, out);
+  s_srv.sendHeader("Cache-Control", "no-store");
   s_srv.sendHeader("Content-Disposition", "attachment; filename=meteoplaneradar.json");
   s_srv.send(200, "application/json", out);
+}
+static void handleExport() { sendExport(false); }
+static void handleExportPost() {
+  JsonDocument doc;
+  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
+  if (!authed(doc)) return;
+  sendExport(true);
 }
 
 static void handleImport() {
@@ -534,13 +660,40 @@ static void handleImport() {
   JsonObjectConst cfg = doc["config"];
   if (cfg.isNull()) { s_srv.send(400, "application/json", "{\"error\":\"config\"}"); return; }
   Settings_FromJson(cfg);
+  // The printer's secrets come along only with "printExport" on (in the file
+  // or already on the device). Empty or missing leaves them as they are.
+  if (Settings_PrintExport()) {
+    Settings_SetPrintKey(cfg["printKey"] | "");
+    Settings_SetPrintPass(cfg["printPass"] | "");
+  }
   NightMode_Apply();
+  s_pend.clear(); s_pendOn = false;      // the import is the newer word
   s_wantRestart = true;
   JsonDocument res; res["ok"] = true;
   sendJson(200, res);
 }
 
+// 0.8.6: the admin password has an endpoint of its own. Before, the same field
+// unlocked update/import/reset AND went out with every Save as the new
+// password - a typo made while unlocking a reset was quietly saved as the new
+// password. Now: {password: current, newPassword: new}; the current one goes
+// through the same check as every other protected action, and an empty new
+// password switches the protection off.
+static void handlePassword() {
+  JsonDocument doc;
+  if (!readBody(doc)) { s_srv.send(400, "application/json", "{\"error\":\"json\"}"); return; }
+  if (!authed(doc)) return;                     // sends 403 and explains itself
+  Settings_SetAdminPassword(doc["newPassword"] | "");
+  // The update page checks the password on every request, so the new one is
+  // live immediately - no restart needed.
+  s_srv.send(200, "application/json",
+             Settings_HasAdminPassword() ? "{\"ok\":true,\"hasPassword\":true}"
+                                         : "{\"ok\":true,\"hasPassword\":false}");
+}
+
 static void handleReboot() {
+  // 0.9.8: "Restart now" on the page - what was held back goes in first.
+  if (s_pendOn) { applyPending(); Serial.println("Nastaveni zmeneno, restartuji na zadost"); }
   s_srv.send(200, "application/json", "{\"ok\":true}");
   delay(200);
   ESP.restart();
@@ -574,12 +727,13 @@ static void handleNotFound() {
 // the drawing code can do about it, so the backlight goes off for the duration
 // and the browser shows the real progress bar.
 static void otaStart() {
-  const bool en = (Lang_Get() == LANG_EN);
   s_updating = true;
   gfx->fillScreen(C_BLACK);
-  UI_TextCentered(en ? "Updating firmware..." : "Probiha aktualizace...",
+  UI_TextCentered(LT("Probiha aktualizace...", "Probíhá aktualizace...", "Updating firmware...",
+                     "Prebieha aktualizacia...", "Prebieha aktualizácia..."),
                   LCD_HEIGHT / 2 - 10, C_WHITE, 2);
-  UI_TextCentered(en ? "Do not disconnect power" : "Neodpojuj napajeni",
+  UI_TextCentered(LT("Neodpojujte napajeni", "Neodpojujte napájení", "Do not disconnect power",
+                     "Neodpajajte napajanie", "Neodpájajte napájanie"),
                   LCD_HEIGHT / 2 + 20, C_GRAY, 1);
   gfx->flush();
   delay(700);
@@ -587,11 +741,12 @@ static void otaStart() {
 }
 
 static void otaEnd(bool ok) {
-  const bool en = (Lang_Get() == LANG_EN);
   Set_Backlight(Settings_Backlight());
   gfx->fillScreen(C_BLACK);
-  UI_TextCentered(ok ? (en ? "Done, restarting..." : "Hotovo, restartuji...")
-                     : (en ? "Update failed"       : "Aktualizace selhala"),
+  UI_TextCentered(ok ? LT("Hotovo, restartuji...", "Hotovo, restartuji...", "Done, restarting...",
+                          "Hotovo, restartujem...", "Hotovo, reštartujem...")
+                     : LT("Aktualizace selhala", "Aktualizace selhala", "Update failed",
+                          "Aktualizacia zlyhala", "Aktualizácia zlyhala"),
                   LCD_HEIGHT / 2, ok ? C_GREEN : C_RED, 2);
   gfx->flush();
   s_updating = false;
@@ -656,22 +811,27 @@ b.onclick=function(){
 
 static void handleUpdatePage() {
   if (!updateAuthed()) { s_srv.requestAuthentication(); return; }
-  const bool en = (Lang_Get() == LANG_EN);
+  // The page is UTF-8, so Czech and Slovak get their accents here.
+  const uint8_t l = Lang_Get();
+  auto W = [l](const char* cz, const char* en, const char* sk) {
+    return l == LANG_EN ? en : (l == LANG_SK ? sk : cz);
+  };
   String p = FPSTR(UPDATE_HTML);
-  p.replace("{{LANG}}",  en ? "en" : "cs");
-  p.replace("{{TITLE}}", en ? "Firmware update" : "Aktualizace firmwaru");
-  p.replace("{{HINT}}",  en ? "Pick the <b>.ino.bin</b> file (the one without "
-                              "<i>merged</i>). The display goes dark while the "
-                              "flash is written and comes back on when it is done."
-                            : "Vyberte soubor <b>.ino.bin</b> (ten bez <i>merged</i>). "
-                              "Displej po dobu zapisu zhasne a po dokonceni se "
-                              "sam rozsviti.");
-  p.replace("{{SEND}}",  en ? "Upload"           : "Nahrat");
-  p.replace("{{BACK}}",  en ? "Back to settings" : "Zpet na nastaveni");
-  p.replace("{{PICK}}",  en ? "Pick a file first." : "Nejdriv vyberte soubor.");
-  p.replace("{{OK}}",    en ? "Done. The device is restarting."
-                            : "Hotovo. Zarizeni se restartuje.");
-  p.replace("{{FAIL}}",  en ? "Update failed"    : "Aktualizace selhala");
+  p.replace("{{LANG}}",  Lang_Code());
+  p.replace("{{TITLE}}", W("Aktualizace firmwaru", "Firmware update", "Aktualizácia firmvéru"));
+  p.replace("{{HINT}}",  W("Vyberte soubor <b>.ino.bin</b> (ten bez <i>merged</i>). "
+                           "Displej po dobu zápisu zhasne a po dokončení se sám rozsvítí.",
+                           "Pick the <b>.ino.bin</b> file (the one without "
+                           "<i>merged</i>). The display goes dark while the "
+                           "flash is written and comes back on when it is done.",
+                           "Vyberte súbor <b>.ino.bin</b> (ten bez <i>merged</i>). "
+                           "Displej počas zápisu zhasne a po dokončení sa sám rozsvieti."));
+  p.replace("{{SEND}}",  W("Nahrát", "Upload", "Nahrať"));
+  p.replace("{{BACK}}",  W("Zpět na nastavení", "Back to settings", "Späť na nastavenia"));
+  p.replace("{{PICK}}",  W("Nejdřív vyberte soubor.", "Pick a file first.", "Najprv vyberte súbor."));
+  p.replace("{{OK}}",    W("Hotovo. Zařízení se restartuje.", "Done. The device is restarting.",
+                           "Hotovo. Zariadenie sa reštartuje."));
+  p.replace("{{FAIL}}",  W("Aktualizace selhala", "Update failed", "Aktualizácia zlyhala"));
   s_srv.sendHeader("Cache-Control", "no-store");
   s_srv.send(200, "text/html; charset=utf-8", p);
 }
@@ -778,7 +938,9 @@ void WebConfig_Begin(bool apMode) {
   s_srv.on("/api/ha", HTTP_GET, handleHa);
   s_srv.on("/api/geocode", HTTP_GET, handleGeocode);
   s_srv.on("/api/export", HTTP_GET, handleExport);
+  s_srv.on("/api/export", HTTP_POST, handleExportPost);
   s_srv.on("/api/import", HTTP_POST, handleImport);
+  s_srv.on("/api/password", HTTP_POST, handlePassword);
   s_srv.on("/api/reboot", HTTP_POST, handleReboot);
   s_srv.on("/api/reset", HTTP_POST, handleReset);
   // The update page authenticates with HTTP Basic when a password is set. See
@@ -810,4 +972,8 @@ void WebConfig_Loop() {
   if (!s_running) return;
   if (s_apMode) s_dns.processNextRequest();
   s_srv.handleClient();
+  if (s_pendOn && millis() - s_pendAt >= RESTART_DELAY_MS) {
+    Serial.println("Nastaveni ceka na restart 2 min, restartuji");
+    applyPending();
+  }
 }

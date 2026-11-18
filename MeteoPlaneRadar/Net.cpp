@@ -53,6 +53,11 @@ static bool txtReserve(size_t need) {
   return true;
 }
 
+// 0.9.7: the HTTP status of the last Net_GetString(), negative for a
+// connection error (HTTPClient's codes), 0 before the first.
+static int s_lastCode = 0;
+int Net_LastCode() { return s_lastCode; }
+
 bool Net_GetString(const char* url, String& out, const char* tag) {
   out = "";
   if (WiFi.status() != WL_CONNECTED) return false;
@@ -78,14 +83,24 @@ bool Net_GetString(const char* url, String& out, const char* tag) {
   http.collectHeaders(DATE_HDR, 1);
 
   int code = http.GET();
+  s_lastCode = code;
   if (code != HTTP_CODE_OK) {
     Serial.printf("%s: HTTP %d\n", tag, code);
     // Say what was asked and what the server said about it. A bare "HTTP 404"
     // cannot tell a wrong parameter from a source that simply has no data yet.
     if (code > 0) {
       Serial.printf("%s: URL %s\n", tag, url);
-      String err = http.getString();
-      if (err.length() > 240) err = err.substring(0, 240);
+      // 0.9.7: at most 240 characters and 2 seconds. http.getString() here was
+      // the same read loop that could spin for ever on a server that sends the
+      // headers of an error page and then goes quiet.
+      String err;
+      WiFiClient* st = http.getStreamPtr();
+      const unsigned long t0 = millis();
+      while (st && err.length() < 240 && millis() - t0 < 2000UL) {
+        const int c = st->available() ? st->read() : -1;
+        if (c < 0) { if (!st->connected()) break; delay(5); continue; }
+        if (c >= 32 && c < 127) err += (char)c;
+      }
       Serial.printf("%s: odpoved: %s\n", tag, err.c_str());
     }
     http.end();

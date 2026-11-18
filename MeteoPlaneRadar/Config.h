@@ -172,6 +172,7 @@
 //  actually is (see Route.h).
 // ---------------------------------------------------------------------------
 #define ROUTE_API_BASE "https://api.adsb.lol/api/0/route"
+#define ROUTE_DB_BASE  "https://api.adsbdb.com/v0/callsign"   // 0.9.7: fallback
 #define ROUTE_CACHE_N  8     // remembered answers (keyed on the callsign)
 
 // ---------------------------------------------------------------------------
@@ -300,6 +301,14 @@
 // ---------------------------------------------------------------------------
 #define WDT_TIMEOUT_S 20       // reboot after this many seconds of being stuck
 
+// 0.9.2: the longest one pass of loop() may take while it is waiting on the
+// network. Downloads feed the watchdog from inside (netPoll), which is right
+// for a slow transfer - and wrong for one that never ends: the screen stood
+// still for hours and nothing restarted. Past this, the downloads stop feeding
+// it and the watchdog restarts the board WDT_TIMEOUT_S later. Generous on
+// purpose: a bad network can stack several slow requests into one pass.
+#define WDT_LOOP_MAX_MS 180000UL
+
 // =============================================================================
 //  0.6.0 additions
 // =============================================================================
@@ -331,7 +340,23 @@
 #define SCREEN_PRICE_I    4
 #define SCREEN_MIX_I      5
 #define SCREEN_SETTINGS_I 6
-#define SCREEN_N          7
+// 0.9.0: appended after Settings for the same reason as the energy screens -
+// bit 7 reads back as 0 on an updated device, so the screen arrives switched
+// off. In the order you step through the screens it comes BEFORE Settings
+// (see SCREEN_ORDER), so Settings stays the last stop.
+#define SCREEN_PRINT_I    7
+// 0.9.6: exchange rates, appended the same way - bit 8 lives in a second NVS
+// byte ("scrM2") that an updated device does not have, so it reads back 0 and
+// the screen arrives switched off. In the order it follows the 3D print.
+#define SCREEN_FX_I       8
+#define SCREEN_CRYPTO_I   9      // 0.9.7, bit 9 = bit 1 of "scrM2": off too
+#define SCREEN_N          10
+// The order of the long press, the dots and the automatic cycling. Indices
+// are what NVS stores, so they never move; this table is what the user sees.
+#define SCREEN_ORDER_INIT { SCREEN_CLOCK_I, SCREEN_PLANES_I, SCREEN_METEO_I, \
+                            SCREEN_FORECAST_I, SCREEN_PRICE_I, SCREEN_MIX_I, \
+                            SCREEN_PRINT_I, SCREEN_FX_I, SCREEN_CRYPTO_I, \
+                            SCREEN_SETTINGS_I }
 
 // Automatic screen cycling: 0 = off, otherwise SECONDS between switches (it was
 // minutes up to 0.6.0 - see Settings.h).
@@ -591,6 +616,18 @@
 // ---------------------------------------------------------------------------
 #define NIGHT_OFFSET_MIN_LIMIT 120     // +/- minutes allowed around sun events
 
+// 0.9.2: what the automatic night switch follows.
+#define NIGHT_SRC_SUN   0              // sunset / sunrise with the offset
+#define NIGHT_SRC_CLOCK 1              // a fixed window, e.g. 22:00 - 6:00
+// 0.9.2: how long a touch lights a display switched off for the night, and how
+// long it stays lit after the last touch.
+#define DARK_WAKE_MS 30000UL
+
+// 0.9.3: layout of the clock screen, chosen on the web.
+#define CLOCK_LAYOUT_BASIC 0           // A: date, time, weather, wind
+#define CLOCK_LAYOUT_SUN   1           // C: + today's max/min, sunrise/sunset
+#define CLOCK_LAYOUT_HOURS 2           // D: + the next hours
+
 // ---------------------------------------------------------------------------
 //  Web configuration server
 //
@@ -617,6 +654,21 @@
 //  before it turns into two labels sitting on top of each other.
 // ---------------------------------------------------------------------------
 #define LAYOUT_DEBUG 0
+
+// ---------------------------------------------------------------------------
+//  Text collision check (0.8.6)
+//
+//  1 = every string drawn on the display (print() and the smooth fonts) is
+//  recorded with its rectangle, and when the frame is flushed any two texts
+//  that overlap - or a text that runs past the edge of the round panel - are
+//  reported on the serial line ("TEXT: ..."). Meant for development: a longer
+//  translation or a different typeface shows up as a line in the log instead of
+//  two words printed over each other. tools/textcheck runs the same check on a
+//  PC over every screen, language and typeface. 0 = compiled out, zero cost.
+// ---------------------------------------------------------------------------
+#ifndef TEXT_CHECK
+#define TEXT_CHECK 0
+#endif
 
 // =============================================================================
 //  0.8.0 additions
@@ -681,7 +733,6 @@
 
 // The window. Bearing of its centre, how wide the view is, and how far you can
 // realistically make out an aircraft through it.
-#define WINDOW_AZ_DEFAULT        180
 #define WINDOW_WIDTH_DEFAULT      90
 #define WINDOW_KM_DEFAULT         15
 
@@ -694,6 +745,14 @@
 // any of the other remembered ones.
 #define WIFI_SWITCH_AFTER_MS 60000UL
 #define WIFI_TRY_MS          12000UL    // per network at boot
+// The access point is up although networks are remembered - usually because the
+// device rebooted (watchdog, power cut) while the router was still down. Every
+// WIFI_AP_RETRY_MS it looks whether a remembered network is back and joins it.
+// A hidden network never shows up in that scan, so as a last resort the device
+// restarts after WIFI_AP_RESTART_MS without anyone on the access point. Neither
+// applies on a first run (nothing remembered) or while a phone is connected.
+#define WIFI_AP_RETRY_MS     120000UL   // 2 min
+#define WIFI_AP_RESTART_MS   1800000UL  // 30 min
 
 // ---------------------------------------------------------------------------
 //  Home Assistant
@@ -704,6 +763,44 @@
 //  the web UI. NOT TESTED against a real Home Assistant - see the README.
 // ---------------------------------------------------------------------------
 #define HA_DEFAULT_ON false
+
+// ---------------------------------------------------------------------------
+//  3D printer watch (0.9.0) - Prusa (PrusaLink) and Klipper (Moonraker)
+//
+//  Runs in a task of its own on the other core, so a printer that is switched
+//  off - which is most of the day - can never stall the display or the other
+//  downloads: a request to an address nobody answers waits for its timeout
+//  there, not in loop(). Read-only: the device never sends a command.
+//
+//  How often it asks:
+//    printer not answering     PRINT_POLL_OFF_MS, after an hour of silence
+//                              PRINT_POLL_DEAD_MS
+//    on, not printing          PRINT_POLL_IDLE_MS
+//    printing / paused         PRINT_POLL_BUSY_MS
+//    the Print screen is shown PRINT_POLL_VIEW_MS (and PRINT_POLL_VIEW_OFF_MS
+//                              while the printer is not answering)
+//  Wrong password or API key: PRINT_POLL_OFF_MS - no point hammering it.
+// ---------------------------------------------------------------------------
+#define PRINT_TYPE_PRUSA    0
+#define PRINT_TYPE_KLIPPER  1
+#define PRINT_POLL_BUSY_MS      10000UL
+#define PRINT_POLL_IDLE_MS      30000UL
+#define PRINT_POLL_OFF_MS       60000UL
+#define PRINT_POLL_DEAD_MS     300000UL
+#define PRINT_POLL_DEAD_AFTER  60        // failed polls (~1 h at one a minute)
+#define PRINT_POLL_VIEW_MS       5000UL
+#define PRINT_POLL_VIEW_OFF_MS  15000UL
+#define PRINT_CONNECT_MS         1500    // TCP connect, LAN only
+#define PRINT_READ_MS            4000    // per read
+#define PRINT_MAX_BODY          32768    // bigger answers are not read at all
+#define PRINT_MOONRAKER_PORT     7125    // Klipper default when no port is given
+#define PRINT_HIST_N             180     // temperature samples kept
+#define PRINT_HIST_STEP_S        10      // at most one sample per 10 s -> 30 min
+#define PRINT_ALERT_MAX_MS     1800000UL // an unanswered alert gives way after 30 min
+// What the alert does at night (the web lets the user choose).
+#define PRINT_NIGHT_BLINK   0            // night brightness, banner blinks (default)
+#define PRINT_NIGHT_FULL    1            // full day brightness, blinks
+#define PRINT_NIGHT_CALM    2            // night brightness, no blinking
 
 // ---------------------------------------------------------------------------
 //  adsb.fi overloaded or down (0.8.4)
@@ -725,3 +822,59 @@
 #define ADSB_RETRY_AFTER_MAX_S   900       // trust Retry-After up to 15 min
 #define ADSB_STALE_MS          60000UL     // grey after one minute
 #define ADSB_HIDE_MS          600000UL     // gone after ten
+
+// =============================================================================
+//  Exchange rates (0.9.6)
+//
+//  Two official sources, chosen by the user's home currency:
+//    CZK        -> Czech National Bank, the daily fixing (denni_kurz.txt).
+//                  A Czech user expects the CNB rate, not one worked out
+//                  from the euro; the two differ in the third decimal.
+//    any other  -> European Central Bank reference rates. Every rate there is
+//                  against the euro, so a pair like PLN->USD is one division:
+//                  (PLN per EUR) / (USD per EUR). One request serves every
+//                  country.
+//  Both are free, without a key, and published once per working day (CNB at
+//  14:30 Prague time, ECB around 16:00 CET). Nothing changes at weekends.
+//
+//  The arrow next to a rate compares it with the previous fixing. CNB: the
+//  same file with ?date= set to the day before (CNB answers with the last
+//  fixing at or before that day). ECB: lastNObservations=2 returns both.
+// =============================================================================
+#define FX_CNB_URL "https://www.cnb.cz/cs/financni-trhy/devizovy-trh/kurzy-devizoveho-trhu/kurzy-devizoveho-trhu/denni_kurz.txt"
+#define FX_ECB_URL "https://data-api.ecb.europa.eu/service/data/EXR/D."   // + "USD+PLN" + FX_ECB_TAIL
+#define FX_ECB_TAIL ".EUR.SP00.A?lastNObservations=2&format=csvdata&detail=dataonly"
+
+#define FX_MAX 6                          // currencies on the screen at most
+
+// When to ask again. The rate changes once a working day, so the device asks
+// rarely - except in the hours after publication, until today's has arrived.
+#define FX_PERIOD_MS    (6UL * 3600000UL) // today's rate is in
+#define FX_WAIT_MS      (2UL * 3600000UL) // not published yet / weekend
+#define FX_PUB_RETRY_MS (20UL * 60000UL)  // published by now, but not seen yet
+#define FX_RETRY_MS     (5UL * 60000UL)   // the request failed - doubled each time...
+#define FX_RETRY_MAX_MS (60UL * 60000UL)  // ...up to an hour
+#define FX_STALE_MS     (26UL * 3600000UL) // no success for this long: say so
+#define FX_CNB_PUB_MIN  (14 * 60 + 35)    // local time the CNB rate is out
+#define FX_ECB_PUB_MIN  (16 * 60 + 10)    // ... and the ECB one
+
+// =============================================================================
+//  Cryptocurrencies (0.9.7)
+//
+//  CoinGecko /simple/price: every chosen coin in the home currency (the same
+//  one as the Exchange rates screen) and its change over 24 hours, in one
+//  request. Free and without a key - the keyless tier allows about 5 calls a
+//  minute per IP, and this asks once every 10 minutes. An optional free
+//  "Demo" key (web, Rates & Crypto tab) only moves the limit. CoinGecko asks to be
+//  credited wherever its data is shown: the screen names it, and so does the
+//  System tab of the web page.
+// =============================================================================
+#define CR_URL      "https://api.coingecko.com/api/v3/simple/price?ids="
+#define CR_URL_TAIL "&include_24hr_change=true&include_last_updated_at=true&precision=full"
+#define CR_MAX       6                    // coins on the screen at most
+#define CR_PERIOD_MS    (10UL * 60000UL)  // normal refresh
+#define CR_RETRY_MS     (2UL * 60000UL)   // after a failure - doubled each time...
+#define CR_RETRY_MAX_MS (30UL * 60000UL)  // ...up to half an hour (429 included)
+#define CR_STALE_MS     (35UL * 60000UL)  // no success for this long: time in orange
+#define CR_DIM_MS       (6UL * 3600000UL) // ...and this long: the prices in grey
+

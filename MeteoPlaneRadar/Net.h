@@ -20,6 +20,9 @@
 // Returns false on no link, not enough heap, a non-200 status or an empty body;
 // the reason is printed once, so a caller can just retry later.
 bool Net_GetString(const char* url, String& out, const char* tag);
+// 0.9.7: HTTP status of the last Net_GetString() (429 = too many requests),
+// negative for a connection error.
+int  Net_LastCode();
 
 // GET the URL into a caller-supplied buffer - for binary payloads (PNG tiles)
 // where a String would double the memory needed.

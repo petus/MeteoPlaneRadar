@@ -275,27 +275,50 @@ static float scaleOf(uint8_t k) {
   }
 }
 
-void PlaneIcon_Draw(int x, int y, float trackDeg, bool hasTrack, uint8_t kind, uint16_t col) {
+// Centre to the furthest point of the icon at zoom 1, whichever way it is
+// turned (0.9.9, for fitting the enlarged icon into the detail panel).
+float PlaneIcon_Radius(uint8_t kind, bool hasTrack) {
+  if (kind == PI_BALLOON) return 10.0f;
+  if (kind == PI_DRONE)   return 14.0f;           // 7 px arms on the diagonal + rotors
+  if (!hasTrack)          return 7.0f;
+  if (kind == PI_HELI)    return 14.0f;           // tail boom and its rotor
+  float m = 0;
+  for (const int8_t* p = shapeOf(kind); *p; p += 2 + 2 * p[0]) {
+    const int n = p[0];
+    for (int i = 0; i < n; i++) {
+      const float r = sqrtf((float)p[2 + 2 * i] * p[2 + 2 * i] + (float)p[3 + 2 * i] * p[3 + 2 * i]);
+      if (r > m) m = r;
+    }
+  }
+  return m * scaleOf(kind);
+}
+
+void PlaneIcon_Draw(int x, int y, float trackDeg, bool hasTrack, uint8_t kind, uint16_t col,
+                    float zoom) {
+  // 0.9.9: the fixed-size shapes below scale with the zoom too.
+  auto Z = [zoom](float v) { return (int)lroundf(v * zoom); };
   // Balloons and drones have no meaningful nose; draw them upright.
   if (kind == PI_BALLOON) {
-    gfx->fillCircle(x, y - 3, 7, col);
-    gfx->drawLine(x - 3, y + 3, x - 2, y + 7, col);
-    gfx->drawLine(x + 3, y + 3, x + 2, y + 7, col);
-    gfx->fillRect(x - 2, y + 7, 5, 3, col);
+    gfx->fillCircle(x, y - Z(3), Z(7), col);
+    gfx->drawLine(x - Z(3), y + Z(3), x - Z(2), y + Z(7), col);
+    gfx->drawLine(x + Z(3), y + Z(3), x + Z(2), y + Z(7), col);
+    gfx->fillRect(x - Z(2), y + Z(7), Z(5), Z(3), col);
     return;
   }
   if (kind == PI_DRONE) {
-    gfx->drawLine(x - 7, y - 7, x + 7, y + 7, col);
-    gfx->drawLine(x - 7, y + 7, x + 7, y - 7, col);
-    gfx->drawCircle(x - 7, y - 7, 3, col); gfx->drawCircle(x + 7, y - 7, 3, col);
-    gfx->drawCircle(x - 7, y + 7, 3, col); gfx->drawCircle(x + 7, y + 7, 3, col);
-    gfx->fillRect(x - 2, y - 2, 5, 5, col);
+    const int d = Z(7), r = Z(3), b = Z(2);
+    gfx->drawLine(x - d, y - d, x + d, y + d, col);
+    gfx->drawLine(x - d, y + d, x + d, y - d, col);
+    gfx->drawCircle(x - d, y - d, r, col); gfx->drawCircle(x + d, y - d, r, col);
+    gfx->drawCircle(x - d, y + d, r, col); gfx->drawCircle(x + d, y + d, r, col);
+    gfx->fillRect(x - b, y - b, 2 * b + 1, 2 * b + 1, col);
     return;
   }
   if (!hasTrack) {
     // Track unknown - circle with a dot (orientation cannot be determined).
-    gfx->drawCircle(x, y, 7, col);
-    gfx->fillCircle(x, y, 2, col);
+    gfx->drawCircle(x, y, Z(7), col);
+    if (zoom > 1.5f) gfx->drawCircle(x, y, Z(7) - 1, col);
+    gfx->fillCircle(x, y, Z(2), col);
     return;
   }
 
@@ -305,16 +328,18 @@ void PlaneIcon_Draw(int x, int y, float trackDeg, bool hasTrack, uint8_t kind, u
   if (kind == PI_HELI) {
     // Rotor disc, cabin, tail boom with a small tail rotor. The disc is what
     // makes it read as a helicopter even at the size of a thumbnail.
-    gfx->drawCircle(x, y, 11, col);
-    gfx->fillCircle(x, y, 4, col);
-    const int tx = x - (int)(13 * sa), ty = y + (int)(13 * ca);
-    gfx->drawLine(x, y, tx, ty, col);
-    gfx->drawLine(x + 1, y, tx + 1, ty, col);                 // two pixels wide
-    gfx->drawLine(tx - (int)(3 * ca), ty - (int)(3 * sa), tx + (int)(3 * ca), ty + (int)(3 * sa), col);
+    gfx->drawCircle(x, y, Z(11), col);
+    if (zoom > 1.5f) gfx->drawCircle(x, y, Z(11) - 1, col);
+    gfx->fillCircle(x, y, Z(4), col);
+    const int tx = x - (int)(Z(13) * sa), ty = y + (int)(Z(13) * ca);
+    const int w = zoom > 1.5f ? 2 : 1;                         // boom thickness
+    for (int k = -w + 1; k <= w; k++) gfx->drawLine(x + k, y, tx + k, ty, col);
+    const int t = Z(3);
+    gfx->drawLine(tx - (int)(t * ca), ty - (int)(t * sa), tx + (int)(t * ca), ty + (int)(t * sa), col);
     return;
   }
 
-  const float s = scaleOf(kind);
+  const float s = scaleOf(kind) * zoom;
   // Same mapping as the original arrow: right = to the right of the nose,
   // fwd = towards it; track 0 points up.
   auto rot = [&](float right, float fwd, int* ox, int* oy) {

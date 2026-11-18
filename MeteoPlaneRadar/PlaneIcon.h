@@ -54,7 +54,13 @@ uint8_t PlaneIcon_Classify(const char* type, const char* cat);
 // Draw the icon centred on (x, y), nose along trackDeg (0 = up, clockwise,
 // already corrected for the map rotation). hasTrack = false draws the
 // "direction unknown" circle as before, whatever the kind.
-void PlaneIcon_Draw(int x, int y, float trackDeg, bool hasTrack, uint8_t kind, uint16_t col);
+// 0.9.9: zoom enlarges the whole icon about its centre (the detail panel draws
+// it three times the size of the one on the radar).
+void PlaneIcon_Draw(int x, int y, float trackDeg, bool hasTrack, uint8_t kind, uint16_t col,
+                    float zoom = 1.0f);
+
+// Centre to the furthest point of the icon at zoom 1 (0.9.9).
+float PlaneIcon_Radius(uint8_t kind, bool hasTrack);
 
 // Short name of the kind for the detail panel / Home Assistant ("helicopter").
 const char* PlaneIcon_Name(uint8_t kind);

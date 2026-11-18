@@ -11,7 +11,9 @@
 #include "Outside.h"
 #include "Layout.h"
 #include "Lang.h"
+#include "SrcHealth.h"
 #include "UI.h"
+#include "AAFont.h"     // AAText_Enabled: accents or not
 #include "Display_ST7701.h"
 #include "Config.h"
 
@@ -47,6 +49,7 @@
 // sitting in their way. Moving it inside the ring frees the whole top band for
 // labels and puts the timestamp next to the numbers it qualifies, at a size
 // that can actually be read.
+#define COUNTRY_Y 172     // 0.9.4: the country, above the renewable share
 #define OZE_LBL_Y 192
 #define OZE_BIG_Y 204
 #define LOAD_Y    244
@@ -75,14 +78,71 @@
 // worse answer than admitting the number is small.
 #define LABEL_MIN_PCT 0.5f
 
-// The screen is not always about Czechia any more. With the country set to
-// anything else the heading has to say so, or a Slovak grid would be labelled
-// as a Czech one - the same class of quiet wrongness as the missing brown coal.
+// 0.9.4: the country by name, in the language of the screen - the same list as
+// the web page offers. Shown at the top of the disc, so a Slovak or a German
+// grid is never mistaken for the Czech one.
+static const struct { const char cc[3]; const char *cs, *en, *sk; } COUNTRIES[] = {
+  {"eu", "Evropa",         "Europe",         "Európa"},
+  {"cz", "Česko",          "Czechia",        "Česko"},
+  {"sk", "Slovensko",      "Slovakia",       "Slovensko"},
+  {"at", "Rakousko",       "Austria",        "Rakúsko"},
+  {"de", "Německo",        "Germany",        "Nemecko"},
+  {"pl", "Polsko",         "Poland",         "Poľsko"},
+  {"hu", "Maďarsko",       "Hungary",        "Maďarsko"},
+  {"si", "Slovinsko",      "Slovenia",       "Slovinsko"},
+  {"hr", "Chorvatsko",     "Croatia",        "Chorvátsko"},
+  {"be", "Belgie",         "Belgium",        "Belgicko"},
+  {"bg", "Bulharsko",      "Bulgaria",       "Bulharsko"},
+  {"ch", "Švýcarsko",      "Switzerland",    "Švajčiarsko"},
+  {"dk", "Dánsko",         "Denmark",        "Dánsko"},
+  {"ee", "Estonsko",       "Estonia",        "Estónsko"},
+  {"es", "Španělsko",      "Spain",          "Španielsko"},
+  {"fi", "Finsko",         "Finland",        "Fínsko"},
+  {"fr", "Francie",        "France",         "Francúzsko"},
+  {"gr", "Řecko",          "Greece",         "Grécko"},
+  {"ie", "Irsko",          "Ireland",        "Írsko"},
+  {"it", "Itálie",         "Italy",          "Taliansko"},
+  {"lt", "Litva",          "Lithuania",      "Litva"},
+  {"lu", "Lucembursko",    "Luxembourg",     "Luxembursko"},
+  {"lv", "Lotyšsko",       "Latvia",         "Lotyšsko"},
+  {"nl", "Nizozemsko",     "Netherlands",    "Holandsko"},
+  {"no", "Norsko",         "Norway",         "Nórsko"},
+  {"pt", "Portugalsko",    "Portugal",       "Portugalsko"},
+  {"ro", "Rumunsko",       "Romania",        "Rumunsko"},
+  {"rs", "Srbsko",         "Serbia",         "Srbsko"},
+  {"se", "Švédsko",        "Sweden",         "Švédsko"},
+  {"ua", "Ukrajina",       "Ukraine",        "Ukrajina"},
+  {"uk", "Velká Británie", "United Kingdom", "Veľká Británia"},
+};
+
+// The country's name for the active language and font - without accents for
+// the built-in pixel font. An unknown code comes back upper-cased ("XY").
+static const char* countryName(char* buf, size_t cap) {
+  const char* cc = Settings_MixCountry();
+  const char* name = nullptr;
+  for (const auto& c : COUNTRIES) {
+    if (!strcmp(c.cc, cc)) {
+      name = Lang_Get() == LANG_EN ? c.en : (Lang_Get() == LANG_SK ? c.sk : c.cs);
+      break;
+    }
+  }
+  if (!name) {
+    snprintf(buf, cap, "%c%c", (char)toupper((unsigned char)cc[0]),
+             (char)toupper((unsigned char)cc[1]));
+    return buf;
+  }
+  if (AAText_Enabled()) { snprintf(buf, cap, "%s", name); return buf; }
+  Lang_ToAscii(buf, cap, name);
+  return buf;
+}
+
+// The heading while there is nothing to draw yet (loading, outside Europe).
 static const char* mixTitle(char* buf, size_t cap) {
   const char* cc = Settings_MixCountry();
   if (!strcmp(cc, "cz")) return T(S_MIX);
-  snprintf(buf, cap, "%s %c%c", T(S_MIX_GEN),
-           (char)toupper((unsigned char)cc[0]), (char)toupper((unsigned char)cc[1]));
+  char nm[40];
+  countryName(nm, sizeof(nm));
+  snprintf(buf, cap, "%s - %s", T(S_MIX_GEN), nm);
   return buf;
 }
 
@@ -127,16 +187,6 @@ static const uint16_t GROUP_COLOR[MIX_GROUPS] = {
   C_GRAY    // other
 };
 
-// Does this rectangle fit inside the glass? Layout_Claim only knows about other
-// elements, not about the rim, and a label block on a diagonal is exactly where
-// a round panel runs out of screen.
-static bool insideCircle(int x, int y, int w, int h) {
-  const int half1 = Layout_ChordHalf(y);
-  const int half2 = Layout_ChordHalf(y + h - 1);
-  const int half  = (half1 < half2) ? half1 : half2;
-  if (half <= 0) return false;
-  return (x >= LCD_WIDTH / 2 - half) && (x + w <= LCD_WIDTH / 2 + half);
-}
 
 // One group label: the source on top, its share underneath.
 //
@@ -228,7 +278,6 @@ static void drawGroupLabel(uint8_t g, float midAngle, float pct) {
       const int x0 = MCX + (int)(R * c) - w / 2;
       const int y0 = MCY + (int)(R * s) - h / 2;
 
-      if (!insideCircle(x0, y0, w, h)) continue;
       // Claimed rather than drawn outright: two narrow neighbouring slices can
       // want the same spot. Failing here is what sends us to the next angle,
       // and eventually to a smaller tier.
@@ -345,6 +394,16 @@ static void fmtPower(float mw, char* out, size_t cap) {
 static void drawCentre() {
   char buf[40];
 
+  // --- the country (0.9.4) ---
+  // At the top of the disc. Size 2, or size 1 when a long name ("Velká
+  // Británie", "United Kingdom") does not fit the chord there.
+  {
+    countryName(buf, sizeof(buf));
+    const uint8_t sz = fitsInDisc(buf, 2, COUNTRY_Y) ? 2 : 1;
+    Layout_ReserveTextCentered(buf, sz, MCX, COUNTRY_Y);
+    UI_TextCentered(buf, COUNTRY_Y, C_WHITE, sz);
+  }
+
   // --- renewable share ---
   // Taken from the source's own figure rather than summed from our groups: it
   // counts the renewable part of waste incineration, which our eight-group
@@ -352,11 +411,37 @@ static void drawCentre() {
   // number from every other publication of the same data.
   const float renew = Energy_RenewableShare();
   if (renew >= 0) {
-    Layout_ReserveTextCentered(T(S_RENEWABLE), 1, MCX, OZE_LBL_Y);
-    UI_TextCentered(T(S_RENEWABLE), OZE_LBL_Y, C_GRAY, 1);
+    // "14% OZE" on one line (0.9.4): the label at size 2 right of the number,
+    // on its baseline. It used to be a size-1 line of its own, and size 1 in
+    // a smooth face is squeezed into the 6 px cell of the built-in font - the
+    // three capitals ran into each other.
     snprintf(buf, sizeof(buf), "%.0f%%", renew);
-    Layout_ReserveTextCentered(buf, 4, MCX, OZE_BIG_Y);
-    UI_TextCentered(buf, OZE_BIG_Y, C_GREEN, 4);
+    const char* lbl = T(S_RENEWABLE);
+    const int wb = Layout_TextW(buf, 4), wl = Layout_TextW(lbl, 2), gap = 8;
+    const int tot = wb + gap + wl;
+    const int dy = OZE_BIG_Y - MCY;                 // the top of the line is its narrowest
+    const long d2 = (long)(R_IN - 6) * (R_IN - 6) - (long)dy * dy;
+    const int room = d2 > 0 ? 2 * (int)sqrtf((float)d2) - 8 : 0;
+    if (tot <= room) {
+      const int x0 = MCX - tot / 2;
+      Layout_Reserve(x0 - 2, OZE_BIG_Y - 2, tot + 4, LY_CHAR_H(4) + 4);
+      gfx->setTextColor(C_GREEN);
+      gfx->setTextSize(4);
+      gfx->setCursor(x0, OZE_BIG_Y);
+      gfx->print(buf);
+      gfx->setTextColor(C_GRAY);
+      gfx->setTextSize(2);
+      gfx->setCursor(x0 + wb + gap, OZE_BIG_Y + LY_CHAR_H(4) - LY_CHAR_H(2));
+      gfx->print(lbl);
+    } else {
+      // Too wide (English "renewable"): the label a size-2 line of its own and
+      // the number a size smaller under it, both between the country and the
+      // load line.
+      Layout_ReserveTextCentered(lbl, 2, MCX, OZE_LBL_Y + 4);
+      UI_TextCentered(lbl, OZE_LBL_Y + 4, C_GRAY, 2);
+      Layout_ReserveTextCentered(buf, 3, MCX, OZE_LBL_Y + 22);
+      UI_TextCentered(buf, OZE_LBL_Y + 22, C_GREEN, 3);
+    }
   } else {
     // No share figure - show the total generated instead, so the middle of the
     // ring is never empty while the ring itself is full.
@@ -405,7 +490,10 @@ static void drawSampleTime() {
     return;
   }
   Layout_ReserveTextCentered(line, 2, MCX, TIME_Y);
-  UI_TextCentered(line, TIME_Y, C_GRAY, 2);
+  // 0.9.7: orange once the sample is over 3 hours old - ENTSO-E is normally
+  // one or two behind, so this means the source has stopped, not that it lags.
+  const bool old = time(nullptr) - at > 3 * 3600;
+  UI_TextCentered(line, TIME_Y, old ? C_ORANGE : C_GRAY, 2);
 }
 
 // Export or import, the bottom line of the middle. Positive means the country
@@ -431,7 +519,7 @@ void ScreenMix_Draw() {
   Layout_ReserveBand(LY_STATUS - 3, 22);
   UI_DrawStatusLine(LY_STATUS);
 
-  char title[24];
+  char title[64];
   const char* head = mixTitle(title, sizeof(title));
 
   if (!Energy_MixInArea()) {
@@ -442,9 +530,7 @@ void ScreenMix_Draw() {
   }
 
   if (!Energy_MixValid()) {
-    UI_TextCentered(head, LCD_HEIGHT / 2 - 20, C_WHITE, 2);
-    UI_TextCentered(WiFi.status() == WL_CONNECTED ? T(S_LOADING) : T(S_WIFI_WAIT),
-                    LCD_HEIGHT / 2 + 10, C_YELLOW, 2);
+    UI_NoData(head, Energy_MixHealth());           // 0.9.7: not "Loading..." for ever
     return;
   }
 

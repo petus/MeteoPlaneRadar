@@ -64,6 +64,11 @@ bool Energy_MixInArea();
 // Ask for a refresh on the next tick (after a settings change).
 void Energy_Invalidate();
 
+// 0.9.7: how the two sources are doing (see SrcHealth.h).
+struct SrcHealth;
+const SrcHealth& Energy_PriceHealth();
+const SrcHealth& Energy_MixHealth();
+
 bool Energy_PriceValid();          // today's prices are in
 bool Energy_TomorrowValid();       // ...and tomorrow's, which arrive after ~14:00
 
