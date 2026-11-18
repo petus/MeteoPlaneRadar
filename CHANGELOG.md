@@ -11,6 +11,543 @@ pohromadě v `MeteoPlaneRadar/Config.h`.
 
 ---
 
+## [0.9.9]
+
+### Přidáno
+
+- **Upozornění „letadlo poblíž“ ve dvou krocích.** Místo zaškrtávátka
+  *Otevřít detail letadla* (0.9.8) je výběr **Co ukázat**: *hned detail*
+  (výchozí), *nejdřív radar, pak detail*, nebo *jen radar*. Při „nejdřív
+  radar“ se ukáže radar s letadlem v tyrkysovém kroužku a jeho vzdáleností pod
+  hodinami, potom se otevře detail. Radar trvá čtvrtinu nastavené doby,
+  nejméně 5 s, nejvýš 15 s a nikdy víc než polovinu (5 s → 2,5 + 2,5;
+  15 s → 5 + 10; 30 s → 7,5 + 22,5; 60 s a víc → 15 s radar). Trasa se začne
+  zjišťovat už během radaru, takže je při otevření detailu obvykle hotová.
+  Když letadlo mezitím zmizí z dat, detail se neotevře a radar doběhne.
+  Nastavení z 0.9.8 se převede samo (zapnuto → hned detail, vypnuto → jen
+  radar), i při importu staršího exportu. NVS klíč `paMode`, v exportu
+  `planeAlertMode`.
+- **Ikona letadla v detailu.** Vpravo vedle řádků Výška, Rychlost a Kurz je
+  silueta podle typu letadla, třikrát větší než na radaru, natočená stejně
+  jako na mapě a v barvě podle výšky (šedá při ztrátě signálu).
+
+## [0.9.8]
+
+### Změněno
+
+- **Přepínání zdrojů trasy letadla je „přilepené“.** Zařízení se ptá
+  aktivního zdroje (na začátku adsb.lol). Když nefunguje (chyba HTTP nebo
+  žádné spojení), zeptá se hned druhého (adsbdb), a když ten odpoví, stane se
+  aktivním a zůstává jím, dokud sám nepřestane fungovat – pak se zkusí zase
+  první. Když aktivní zdroj funguje, ale trasu daného letu nezná nebo nesedí
+  k poloze, zeptá se zařízení i druhého, jen pro to jedno letadlo a bez
+  přepnutí. Aktivní zdroj si zařízení pamatuje i po restartu (NVS klíč
+  `rtSrc`; není v exportu nastavení, je to stav zařízení).
+- Odpadla půlhodinová pauza pro adsb.lol z 0.9.7.
+- Řádek **Trasa letu** na stavové stránce webu ukazuje, který zdroj je
+  aktivní, a u zdroje, který selhal, jeho HTTP kód.
+- **Web: každá obrazovka má svou záložku.** Nové záložky **Hodiny** (vteřinový
+  prstenec, barvy, rozložení, svátek – dříve ve Vzhledu) a **Meteoradar**
+  (zdroj dat, legenda, režim jen při bouřce – dříve v Obrazovkách; zdroj se
+  dál ukládá tlačítkem Uložit, protože vyžaduje restart). Záložka **Vzhled**
+  se jmenuje **Displej** a má jen to, co platí pro celý displej: jas, noční
+  režim, vypnutí v noci a písmo. Na záložce **Obrazovky** zůstal jen výběr
+  obrazovek, střídání a tečky.
+- Záložka obrazovky je vidět, **jen když je obrazovka zapnutá** (stačí
+  zaškrtnout, ještě před uložením). Letadla, Meteoradar a Tiskárna zůstávají
+  vidět i s vypnutou obrazovkou, dokud je zapnuté letadlo poblíž, meteoradar
+  jen při bouřce nebo hlídání tiskárny – fungují i bez obrazovky a jinak by
+  nešly vypnout. Na záložce Energie se karta Ceny elektřiny a karta Výroby
+  ukazuje podle toho, která z obou obrazovek je zapnutá, a karta Kryptoměny
+  jen se zapnutou obrazovkou Kryptoměny.
+- **Web: všechno se ukládá hned, obecné tlačítko Uložit zmizelo.** Dřív se
+  poloha, výběr obrazovek a zdroj meteoradaru ukládaly až tlačítkem a zbytek
+  hned, i v rámci jedné záložky. Teď se ukládají hned i tyhle tři; protože
+  vyžadují restart, zařízení je drží v paměti a běží dál s původním stavem.
+  Dole se objeví pruh „Změny se projeví po restartu“ s odpočtem a tlačítkem
+  **Restartovat teď**; bez něj se zařízení restartuje samo 2 minuty po
+  poslední takové změně. Pruh se ukáže i po znovunačtení stránky
+  (`restartPending`/`restartIn` v `/api/config` a `/api/status`). Vrácení
+  změny zpět (odškrtnutí a zaškrtnutí) restart zruší. Tlačítko Restart na
+  záložce Systém zapíše čekající změny před restartem; import je přepíše.
+- Při ukládání se teď restart vyvolá i změnou obrazovek Kurzy měn a
+  Kryptoměny (dřív se jejich změna do porovnání nepočítala).
+- Klíče nastavení, export a import se nemění.
+
+- **Tečky obrazovek nahoře se vejdou na kulatý displej.** Při osmi a více
+  viditelných obrazovkách krajní tečky zasahovaly do okraje displeje. Rozestup
+  se teď zmenšuje podle počtu (20 px nejvýš, 12 px při všech jedenácti), aby
+  každá tečka byla celá aspoň 6 px od okraje.
+
+### Přidáno
+
+- **Letadlo poblíž bez detailu.** Nová volba *Otevřít detail letadla*
+  (výchozí zapnuto = jako dosud). Vypnutá: obrazovka Letadla se při
+  upozornění ukáže bez panelu detailu, letadlo dostane tyrkysový dvojitý
+  kroužek (vně kroužků nouzového a sledovaného letadla) a v řádku pod
+  hodinami je místo počtu letadel „nablízku 2,3 km“ / „v okně …“. NVS klíč
+  `paDet`, v exportu a importu jako `planeAlertDetail`.
+
+---
+
+## [0.9.7]
+
+### Přidáno
+
+- **Nová obrazovka Kryptoměny** (za Kurzy měn), také **vypnutá** po
+  aktualizaci. Až 6 mincí z 12 (BTC, ETH, SOL, XRP, BNB, ADA, DOGE, TRX,
+  LTC, DOT, LINK, USDT) v domácí měně kurzů a šipka se změnou za 24 hodin.
+  Zdroj **CoinGecko**, bez klíče, dotaz jednou za 10 minut. Miliony se píšou
+  jako miliony — „2,05 mil.“ (anglicky „2.05 M“) s menší příponou, od
+  10 000 celé číslo s mezerou („75 432“). Pod nadpisem čas ceny od CoinGecko.
+- **Web, záložka Kurzy & Krypto** (dřív Kurzy): sekce Kryptoměny se seznamem mincí (nejvýše 6),
+  tlačítkem Výchozí výběr a nepovinným API klíčem CoinGecko (Demo). Výběr
+  mincí je součástí exportu a importu, klíč ne a na web se nevrací.
+
+- **Hodiny, varianta C je teď „Slunce a Měsíc“:** pod řádkem počasí východ
+  ▲ a západ ▼ Slunce, pod ním východ a západ Měsíce; ikona Měsíce v tom
+  řádku ukazuje jeho aktuální fázi. Dnešní max/min se přesunulo žlutě do řádku počasí.
+  Měsíc se počítá přímo v zařízení pro polohu z nastavení (stejnou jako
+  předpověď), bez dalšího dotazu na internet; proti astronomické efemeridě
+  je odchylka typicky do půl minuty, v 95 % případů do 1,6 minuty. Na jižní
+  polokouli je ikona fáze zrcadlově. Den, kdy Měsíc nevyjde nebo nezapadne,
+  ukáže „--“.
+- **Trasa letadla (odkud – kam) se zase zobrazuje.** Trasová služba
+  adsb.lol od října 2026 často neodpovídá (HTTP 503, 403 nebo prázdná
+  odpověď) a detail letadla pak zůstal bez trasy. Když adsb.lol trasu nemá
+  nebo neodpoví, zeptá se zařízení **adsbdb.com**. adsbdb nezná polohu
+  letadla, takže to, jestli trasa sedí, kontroluje zařízení samo: oklika přes
+  letadlo smí být nejvýš o 25 % + 150 km delší než přímá spojnice letišť
+  (Bukurešť → Lutych nad Prahou projde, Atény → Istanbul nad Prahou ne).
+  adsb.lol, který selže, se pak půl hodiny vynechává.
+- Na stavové stránce webu je nový řádek **Trasa letu** s výsledkem posledního
+  dotazu a odpovědí adsb.lol (např. „adsb.lol 503“).
+- **Řádek počasí na hodinách:** když se nevejde do kruhu, vynechá se vítr
+  (srážky mají přednost). Dřív v takovém případě zmizel celý řádek.
+
+### Výpadky zdrojů
+
+- **Obrazovka už nezůstane na „Načítám…“, když zdroj nefunguje.** Kurzy,
+  Kryptoměny, Cena elektřiny, Výroba a Předpověď po neúspěšném pokusu ukážou
+  „Zdroj nedostupný“ a kdy bude další pokus („další pokus za 4 min“).
+- **Data se drží, i když zdroj vypadne, a je vidět, že jsou stará:**
+  kurzy po víc než dni bez odpovědi napíšou k datu „– staré“ oranžově;
+  kryptoměny po půl hodině zoranžoví čas, po 6 hodinách zešednou i ceny;
+  u Výroby zoranžoví „data z …“, když je vzorek starší než 3 hodiny.
+- **Opakování s rostoucí pauzou:** kurzy 5, 10, 20, 40 a pak každých 60 minut,
+  kryptoměny 2, 4, 8, 16 a pak každých 30 minut (i při odpovědi 429
+  „příliš mnoho dotazů“). Zdroj, který nefunguje, se tak nezahlcuje.
+- **Opraveno možné zaseknutí při chybové odpovědi serveru:** text chyby
+  (např. u HTTP 429 nebo 503) se dřív četl funkcí, která mohla na mlčícím
+  spojení čekat donekonečna. Teď nejvýš 240 znaků a 2 sekundy.
+- Stavová stránka webu ukazuje u kryptoměn i důvod (429, neplatný klíč, HTTP kód).
+
+### Technicky
+
+- Obrazovka Kryptoměny má index 9; její bit je v klíči NVS `scrM2` (od
+  0.9.6), takže je po aktualizaci vypnutá.
+- `SrcHealth.h` (stav zdroje: poslední úspěch, chyby v řadě, další pokus),
+  `UI_NoData()`, `RateTable.*` (společná tabulka kurzů a kryptoměn, obrazovka
+  Kurzy měn ji teď používá také), `Crypto.*`, `ScreenCrypto.*`,
+  `Net_LastCode()`, `Moon.*` (výpočet Měsíce podle SunCalc doplněný
+  o hlavní poruchové členy dráhy, paralaxu a přesný hvězdný čas),
+  `WxIcon_Moon()`, `WxIcon_RiseSet()`, `RouteGeo.h` (kontrola trasy
+  k poloze letadla).
+- **Úklid nepoužívaného kódu** (beze změny chování): 14 funkcí, které nic
+  nevolalo (`Settings_BrightNight`, `Settings_Language`,
+  `Settings_RadarIsChmu`, `Settings_EnabledCount`, `Settings_FxHome`,
+  `Settings_FxList`, `Settings_CryptoList`, `Fx_Home`, `Crypto_Vs`,
+  `Moon_Fraction`, `ADSB_LastHttpCode`, `ScreenPlanes_AlertActive`,
+  `ScreenPrint_AlertOn`, `TW`), 7 nepoužívaných textů v `Lang.h`, osiřelý
+  popisek „Směr okna“ na webu a konstanty `C_BLUE` a `TCA9554_INPUT_REG`.
+- `tools/textcheck` kreslí Kryptoměny a stavy „zdroj nedostupný“ a „staré“
+  ve všech jazycích a písmech.
+
+---
+
+## [0.9.6]
+
+### Přidáno
+
+- **Nová obrazovka Kurzy měn** (za 3D tiskem). Až šest měn, u každé kolik
+  stojí v domácí měně a šipka se změnou proti předchozímu kurzu („▲ 0,16 %“).
+  Nahoře domácí měna, zdroj a datum kurzu. Měny s malou jednotkou se ukazují
+  za 100 nebo 1000 kusů (100 HUF, 100 JPY) jako na kurzovním lístku.
+  Po aktualizaci je **vypnutá** — zapíná se na záložce Obrazovky.
+- **Zdroj podle domácí měny:** koruna → kurzy devizového trhu **ČNB**
+  (vyhlašuje kolem 14:30), jakákoli jiná → referenční kurzy **ECB**
+  (kolem 16:00); kurz mezi dvěma neeurovými měnami se přepočítá přes euro.
+  Zdarma, bez klíče. Stahuje se jen se zapnutou obrazovkou, a to zřídka:
+  po vyhlášení dnešního kurzu jednou za 6 hodin, mezi vyhlášením a jeho
+  stažením po 20 minutách, o víkendu po 2 hodinách. U ČNB jeden dotaz navíc
+  na předchozí kurz kvůli šipce.
+- **Webová záložka Kurzy:** domácí měna (automaticky podle jazyka: čeština
+  → CZK, slovenština → EUR, angličtina → měna země vybrané u výroby
+  elektřiny, jinak EUR; nebo ručně CZK, EUR, PLN, HUF, CHF, GBP, DKK, SEK,
+  NOK, RON, USD) a zaškrtávací seznam 16 měn (nejvýše 6), tlačítko
+  Výchozí výběr. Změny platí hned, bez restartu; po změně domácí měny nebo
+  výběru se nová data stáhnou okamžitě.
+- **Domácí měna i výběr měn jsou součástí exportu a importu nastavení**
+  (`fxHome`, `fxList`).
+- Stav stahování kurzů je na stavové stránce webu (řádek Kurzy měn).
+
+### Technicky
+
+- Nová obrazovka má index 8; její bit je v novém klíči NVS `scrM2`, takže
+  na aktualizovaném zařízení je vypnutá a stávající obrazovky zůstávají, jak
+  byly.
+- `FxParse.*` (čtení ČNB a ECB, formát čísel) je bez Arduina a otestované
+  na PC; `tools/textcheck` kreslí obrazovku ve všech jazycích a písmech.
+- Číslo verze 0.9.5 bylo vynecháno.
+
+---
+
+## [0.9.4]
+
+### Opraveno
+
+- **Tenké tmavé čáry v barevných prstencích** obrazovek Cena elektřiny
+  a Výroba (mix). Prstenec se kreslil jako vějíř paprsků a mezi sousedními
+  paprsky zůstávaly na mřížce displeje nevybarvené pixely. Teď se každá výseč
+  vyplňuje po pixelech (jen ve svém ohraničení, s rychlým výpočtem úhlu),
+  bez děr a s kulatými okraji. Tenké mezery mezi zdroji u mixu zůstaly —
+  ty jsou záměrné.
+- **Cena elektřiny:** hodiny značí malé tečky na vnitřní straně prstence,
+  u 0, 6, 12 a 18 h větší a světlejší. Černé zářezy do barvy a dlouhé černé
+  čáry přes pás jsou pryč.
+- **Výroba (mix): po změně země se hned načtou nová data.** Dřív na obrazovce
+  zůstala čísla původní země až do dalšího pravidelného stažení (15 minut).
+  Teď se stará data zahodí hned, obrazovka ukáže „načítám“ a nová země se
+  stáhne v nejbližším průchodu, přednostně před cenou.
+
+- **Výroba (mix): slepená písmena „OZE“.** Popisek byl nejmenší velikostí,
+  kterou hladká písma musí vtěsnat do buňky pixelového písma. Teď je ve
+  velikosti 2 vedle procenta na stejné základní lince („14 % OZE“). Anglické
+  „renewable“ se tam nevejde, takže je řádkem nad číslem.
+
+### Přidáno
+
+- **Výroba (mix): název země nahoře ve středu prstence** — „Česko“,
+  „Slovensko“, „Velká Británie“ … v jazyce displeje (u pixelového písma bez
+  diakritiky). Dlouhý název, který se nevejde, se zmenší. Při načítání je
+  země i v nadpisu („Výroba – Slovensko“).
+
+## [0.9.3]
+
+### Přidáno
+
+- **Rozložení obrazovky Hodiny na výběr** (záložka Vzhled, *Rozložení hodin*):
+  - **základní** (výchozí) — datum, čas, počasí a vítr, nově rozložené po
+    celém displeji: dřív bylo všechno v horních dvou třetinách a dole prázdno;
+  - **s dnešním max/min a sluncem** — dole dnešní nejvyšší / nejnižší teplota
+    a čas východu a západu slunce;
+  - **s předpovědí na příští hodiny** — dole tři okénka: počasí za 2, 4
+    a 6 hodin (ikona podle denní doby, teplota, hodina) a pod nimi modře
+    srážky, jen když má pršet; jednotka „mm“ menším písmem, aby se sousední
+    okénka nepletla. Datum, čas a počasí jsou v tomto rozložení o kousek výš.
+  U obou rozšířených se vítr přesune do řádku s počasím. Svátek nad datem jde
+  ve všech třech vypnout jako dosud. Data už zařízení stahuje (předpověď
+  Open-Meteo), nic dalšího se nestahuje. Obě písma — pixelové i hladká.
+- **Větší čas v pixelovém písmu**: velikost 10 místo 8 (60 × 80 px na znak,
+  číslice vysoké 70 px místo 56). Hladká písma byla dosud skoro dvakrát větší.
+  Datum a svátek se kvůli tomu v pixelovém písmu posunuly o kousek výš.
+- `tools/textcheck` kreslí všechna tři rozložení ve všech jazycích a písmech,
+  se svátkem i bez něj a s nápovědou den/noc dole; ta se nově počítá do
+  kontroly kolizí.
+
+## [0.9.2]
+
+### Přidáno
+
+- **Svátek na obrazovce hodin**, nad datem: „Svátek: Martin“, slovensky
+  „Meniny: Martin, Maroš“. Česky český kalendář, slovensky slovenský,
+  v angličtině se nezobrazuje. Ve státní svátek bez jména se ukáže jeho název
+  („Svátek práce“, „Prvý sviatok vianočný“). Barvou ztlumené barvy hodin, ve
+  všech čtyřech písmech; pixelové písmo bez diakritiky. Když je jmen víc, než
+  se nahoře na kruh vejde, odpadne nejdřív popisek a teprve potom jména od
+  konce. Vypíná se na záložce Vzhled (*Zobrazit svátek nad datem*), ve
+  výchozím stavu zapnuto.
+  - Data: český kalendář z [namedays-cs](https://github.com/OzzyCzech/namedays-cs)
+    (Roman Ožana, MIT), slovenský oficiální kalendář Ministerstva kultúry SR
+    z [slovak-name-days](https://github.com/jozefgrencik/slovak-name-days)
+    (Jozef Grenčík, MIT). Generuje je `tools/make_namedays.py` do
+    `NameDays.h`, uvedení zdroje je v LICENSE.txt a na záložce Systém.
+- **Zvýrazněné vteřiny po pěti** na vteřinovém prstenci hodin: na 5, 10, 15 …
+  60 s je o kousek větší kroužek ve stejné barvě, jako značky po pěti
+  minutách na ciferníku. Ve všech stylech prstence (tečky, čára, kometa).
+- **Noční jas podle času.** Na záložce Vzhled se místo zaškrtávátka volí
+  *Noční jas zapínat*: ručně (klepnutím na hodiny), podle slunce (jako dosud,
+  s posunem), nebo **podle času** — noc od – do, i přes půlnoc (22:00 – 6:00).
+  Stávající nastavení se převezme beze změny.
+- **Vypnutí displeje v noci.** Nová karta *Vypnutí displeje v noci* na záložce
+  Vzhled: ve zvoleném čase (výchozí 23:00 – 6:00) displej úplně zhasne.
+  Zařízení přitom běží dál, stahuje a kreslí, takže po rozsvícení je hned
+  aktuální obraz. Ve výchozím stavu vypnuto.
+  - **Dotyk** displej rozsvítí na 30 s; první dotyk jen rozsvěcí a nic
+    nepřepne, další dotyky dobu prodlužují.
+  - **Upozornění (letadlo, tisk) displej rozsvítí** — volba, výchozí zapnuto.
+    Displej svítí, dokud upozornění trvá, pak zase zhasne. Bez ní zůstane tma:
+    upozornění na letadlo se vynechá, upozornění od tiskárny proběhne potmě
+    a nevyřízené ráno ukáže barevná tečka na hodinách.
+
+### Opraveno
+
+- **Zamrzlý displej bez restartu při výpadku spojení uprostřed stahování.**
+  Když spojení umřelo ve chvíli, kdy zařízení čekalo na data (restart
+  routeru, výpadek WiFi, server, který přestal posílat a spojení nezavřel),
+  čtení odpovědi se točilo donekonečna: knihovna HTTPClient po každém
+  čekání na data (6–15 s) zavolala naši kontrolu, ta nakrmila watchdog,
+  a protože nepřišel ani bajt, nedalo se čtení zastavit „krátkým zápisem“.
+  Obraz stál (hodiny se nehýbaly), dotyk nereagoval a watchdog nic
+  nerestartoval — klidně hodiny. Teď se po vypršení času na čtení
+  (15 s) spojení zavře a stahování skončí chybou; na displeji zůstanou
+  předchozí data. Ověřeno simulací smyčky z HTTPClient 3.3.10: dřív bez
+  konce, teď konec za 20 s.
+- **Pojistka proti zaseknutí, které zatím neznáme:** stahování smí watchdog
+  krmit jen 3 minuty v rámci jednoho průchodu programem (`WDT_LOOP_MAX_MS`).
+  Kdyby se cokoli jiného točilo dál, watchdog zařízení restartuje místo
+  zamrzlé obrazovky. Co viselo, se zapíše do paměti, která restart přežije,
+  a stavová stránka webu pak u restartu ukáže např.
+  „WATCHDOG (zaseknute: CHMU)“.
+- **Po 49,7 dnech běhu se mohlo zastavit střídání obrazovek** — typicky
+  „zasekne se na hodinách“. Vnitřní počítadlo milisekund po 49,7 dnech
+  přeteče a čtyři časovače ho porovnávaly způsobem, který přetečení
+  nepřežije: pauza střídání po dotyku (střídání stálo tak dlouho, jak dlouho
+  zařízení běželo od posledního dotyku), pauza upozornění na letadlo,
+  stahování letadel (obrazovka Letadla bez nových dat) a opakování dlaždic
+  RainVieweru. Všechny teď počítají rozdílem, který přetečení zvládá.
+- **Hlídací pes (watchdog) se zapíná dřív** — hned po startu hardwaru, ne až
+  na konci startu. Pokryje tak i připojování k WiFi, zjištění polohy podle IP
+  a první stahování; zaseknutí v nich dřív nechalo zařízení viset bez
+  restartu.
+- Oprava obrazu displeje (při ztrátě snímků panelu) nerozsvítí displej, který
+  má být v noci vypnutý.
+
+### Ověřeno
+
+- Problém s nepřipojením k WiFi po restartu hlídacím psem (zůstane QR kód) je
+  vyřešený od 0.8.6: přístupový bod se každé 2 minuty podívá po uložené síti
+  a po 30 minutách bez obsluhy se zařízení restartuje.
+- `tools/textcheck`: svátek ve všech jazycích a písmech na nejdelších dnech
+  obou kalendářů a nejdelších státních svátcích — bez kolize textu.
+- Noční režim podle času, vypnutí displeje, probuzení dotykem, upozornění
+  a přetečení počítadla vyzkoušeny testem na PC; svátky (indexy včetně
+  29. února, převod na písmo bez diakritiky) také.
+
+## [0.9.1]
+
+### Přidáno
+
+- **Trasu letadla (odkud – kam) jde vypnout.** Na záložce Letadla v kartě
+  Zobrazení radaru je nová volba *Zobrazit trasu (odkud – kam) v detailu
+  letadla*, ve výchozím stavu zapnutá jako dřív. Trasa se dohledává podle
+  callsignu v databázi adsb.lol a občas nesedí, protože letecké společnosti
+  používají stejný callsign na různých linkách. Vypnutá se v detailu letadla
+  neukáže a zařízení se na ni ani neptá. Ukládá se hned a je v exportu
+  i importu nastavení.
+
+- **Tečky obrazovek nahoře mohou samy zmizet.** Na záložce Obrazovky je nová
+  volba *Tečky obrazovek nahoře*: vždy zobrazené (výchozí, beze změny proti
+  0.9.0), nebo skrýt po 3, 5 či 10 s. Tečky se ukážou po každém přepnutí
+  (dlouhý stisk, automatické střídání, přepnutí z prohlížeče) a po dotyku
+  displeje, po zvolené době zmizí. Volba je v exportu i importu nastavení.
+  - Na obrazovce Nastavení zůstávají vždy — tam se člověk orientuje.
+  - Upozornění na letadlo a na tisk přepne obrazovku bez teček; dotyk je
+    vrátí.
+  - V noci je nepřinese automatické střídání ani návrat po upozornění, aby
+    zbytečně nesvítily do tmy. Dotyk, dlouhý stisk nebo přepnutí
+    z prohlížeče je ukážou i v noci.
+  - Skrytí je jedno překreslení celé obrazovky bez teček. Všechny obrazovky
+    mají pod tečkami pruh, do kterého nic nekreslí (hlídá to
+    `tools/textcheck`), takže po zmizení teček nic neprobliká a nic se
+    neodkryje.
+
+## [0.9.0]
+
+### Přidáno
+
+- **Hlídání 3D tiskárny: Prusa (PrusaLink) a Klipper (Moonraker).** Nová
+  záložka **Tiskárna** ve webovém nastavení a nová obrazovka **3D tisk**.
+  Zařízení se tiskárny v místní síti ptá, jak se jí daří, a ukazuje:
+  - **prstenec** po obvodu: kolik času už tisk běží proti tomu, kolik ještě
+    zbývá (podle času, ne podle polohy v souboru),
+  - stejné údaje **číslem**: uplynulo, zbývá a v kolik bude hotovo
+    („hotovo 8:40“, „+1“ znamená zítra), procenta, vrstvu,
+  - jméno souboru a **materiál** (PLA, PETG …) a jeho hmotnost, pokud je
+    slicer zapsal do souboru,
+  - **graf teploty trysky a podložky** za poslední půlhodinu, včetně cílové
+    teploty. Tiskárna historii nedává, zařízení si ji samo zapisuje každých
+    10 s, takže po startu se graf teprve plní.
+
+  Prusa: MK4, MK3.9, XL, MINI, CORE One a další s PrusaLinkem, ověření jménem
+  a heslem (HTTP Digest) nebo API klíčem; starší PrusaLink (MK3S s RPi) přes
+  původní rozhraní `/api/job`. Klipper: Moonraker, výchozí port 7125, jiný jde
+  zapsat za dvojtečku (`192.168.1.50:80`).
+- **Obrazovka 3D tisk je po aktualizaci vypnutá** — stávající uživatelé
+  nepoznají žádný rozdíl, dokud ji sami nezapnou na záložce Obrazovky. I když
+  je zapnutá, do střídání obrazovek se zařadí **jen když se tiskne**; bez
+  tisku se přeskakuje. Ručně (dlouhým stiskem) se na zapnutou obrazovku dá
+  přepnout kdykoli a ukáže stav tiskárny („nedostupná“, „chybí heslo“,
+  „připravena“ …).
+  Hlídání tiskárny je na obrazovce nezávislé: upozornění chodí, i když je
+  obrazovka vypnutá.
+- **Upozornění na konec tisku, chybu a pozastavení** (každé jde vypnout na
+  webu). Displej se přepne na obrazovku 3D tisk a přes střed ukáže barevný
+  pruh („Tisk hotov“, „Chyba tisku“ s textem chyby od tiskárny, „Tisk
+  pozastaven“). Pruh drží, dokud se displeje nedotknete, nejdéle 30 minut;
+  potom zařízení pokračuje jako dřív a na hodinách zůstane barevná tečka,
+  dokud se displeje nedotknete. Zrušený tisk upozornění nevyvolá. Každý tisk
+  upozorní nejvýš jednou a po restartu zařízení se neupozorňuje na tisk, který
+  doběhl dřív. Chyba tisku má přednost před upozorněním na letadlo.
+- **V noci** (volba na webu): noční jas a blikání (výchozí), plný denní jas
+  a blikání, nebo noční jas bez blikání.
+- **Home Assistant:** `/api/ha` má objekt `print` (stav, průběh, zbývající
+  čas, teploty, materiál, vrstva) a blok YAML na webu přidá senzory
+  `MPR Tisk stav`, `MPR Tisk prubeh`, `MPR Tisk zbyva`, `MPR Tryska` a
+  `MPR Podlozka`.
+- `tools/printcheck/` — testy čtení odpovědí PrusaLinku a Moonrakeru, určení
+  událostí a výpočtu Digest (MD5, RFC 2617) na PC.
+
+### Ochrany
+
+- **Nedostupná tiskárna nic nezastaví.** Všechno síťové povídání s tiskárnou
+  běží ve vlastní úloze na druhém jádře. Displej, web i ostatní stahování si
+  jen berou hotovou kopii posledního stavu. Připojení má limit 1,5 s, čtení
+  4 s, odpověď delší než 32 kB se vůbec nečte a z JSONu se čtou jen potřebná
+  pole.
+- **Ptá se jen tak často, jak je potřeba:** při tisku každých 10 s, bez tisku
+  každých 30 s, když tiskárna neodpovídá jednou za minutu a po hodině ticha
+  jednou za 5 minut. Špatné heslo: jednou za minutu, aby se tiskárna
+  nezahlcovala. Na obrazovce 3D tisk častěji (5 s, nedostupná 15 s). Během
+  aktualizace firmwaru a bez WiFi se neptá vůbec.
+- **Jen čtení.** Zařízení tiskárně nikdy nic nepošle — nezastaví, nepozastaví
+  ani nespustí tisk.
+- **Heslo, jméno a API klíč si zařízení pamatuje i po restartu.** Flash není
+  šifrovaná, kdo má desku v ruce, může je přečíst. Heslo ani klíč nikdy nejdou
+  zpátky do prohlížeče (web ukáže jen „uloženo / nezadáno“) a tovární reset je
+  smaže. Tlačítko *Zapomenout heslo a klíč* je smaže okamžitě.
+- **Do exportu a importu nastavení jdou heslo a klíč jen po zaškrtnutí**
+  *Heslo a API klíč i do exportu a importu nastavení* (ve výchozím stavu
+  vypnuto). Zaškrtnuté jsou v souboru exportu čitelně a import je převezme;
+  takový export se stahuje přes heslo správce (pokud je nastavené), obyčejný
+  odkaz `/api/export` je nikdy neobsahuje. Bez zaškrtnutí v exportu nejsou a
+  import uložené heslo a klíč nemění.
+- **Texty od tiskárny se čistí**: jméno souboru, materiál a chybová hláška se
+  zkrátí a zbaví řídicích znaků, než se dostanou na displej nebo web.
+- Doporučení zadat tiskárně **IP adresu** — název `.local` funguje, ale
+  překládá se pomaleji; zařízení si přeloženou adresu pamatuje.
+
+### Opraveno
+
+- **„Více“ v nápovědách se po rozbalení mění na „Méně“** (slovensky
+  „Menej“, anglicky „Less“) a dalším klepnutím se text zase sbalí. Platí pro
+  všechny nápovědy na webu.
+
+### Ověřeno
+
+- `tools/textcheck` kreslí obrazovku 3D tisk ve všech stavech (vypnuto,
+  čeká, nedostupná, špatné heslo, nečitelná odpověď, připravena, ohřívá,
+  tiskne, pozastavena, hotovo, chyba, zrušeno, dlouhé jméno souboru) a všechna
+  tři upozornění, ve třech jazycích a čtyřech písmech: bez kolize textu.
+- `tools/printcheck`: 69 z 69 kontrol.
+- Webová záložka Tiskárna vyzkoušena v prohlížeči na šířce telefonu ve všech
+  jazycích.
+
+### Známá omezení
+
+- **Se skutečnou tiskárnou to zatím nikdo nezkoušel.** Čtení odpovídá
+  zveřejněné dokumentaci PrusaLinku (OpenAPI) a Moonrakeru, ne zkušenosti
+  s konkrétním kusem. Pokud vaše tiskárna hlásí něco jiného, pošlete prosím
+  stavovou stránku z webu (řádek Tiskárna).
+- Materiál u Prusy pochází z metadat souboru, která PrusaLink posílá jen
+  u některých verzí firmwaru; když chybí, řádek s materiálem se nezobrazí.
+- Hlídá se jedna tiskárna. Stav je v jedné struktuře, takže druhá jde
+  doplnit později bez předělávání.
+
+## [0.8.7]
+
+### Opraveno
+
+- **Výšky letadel v jednotkách podle volby.** Přepínač Metrické jednotky
+  platil jen pro detail letadla. Legenda barev pod počtem letadel zůstávala
+  v kilometrech, hranice barev na webu v metrech a filtr výšky ve stopách.
+  Teď je všechno podle volby:
+  - **metrické:** legenda v km, hranice barev i filtr výšky v metrech,
+  - **letecké:** legenda v tisících stop („6.6  19.7  32.8 tis. ft“, anglicky
+    „kft“), hranice barev i filtr výšky ve stopách (ft).
+
+  Uložené hodnoty se nemění. Hranice se dál ukládají v metrech a filtr ve
+  stopách, web je jen přepočítá: stopy na celé stovky, takže 5 000 ft zadaných
+  na webu se vrátí jako 5 000 ft. Přepnutím jednotek se nic neuloží jinak.
+  Legenda si podle potřeby rozšíří políčka, aby se čísla ve stopách
+  nedotýkala.
+
+## [0.8.6]
+
+### Přidáno
+
+- **Slovenčina.** Třetí jazyk pro displej i webové nastavení. Na displeji se
+  přepíná stejným tlačítkem jako dosud (čeština → English → slovenčina), na
+  webu je v nabídce jazyků. S vyhlazeným písmem je se slovenskou diakritikou
+  (ľ, ô, ä, ĺ, ŕ), s pixelovým bez ní. Měsíce a dny jsou slovensky
+  („Pi 6. novembra“), stránka aktualizace firmwaru i vyhledávání měst taky.
+- **Kontrola kolizí textu.** Nástroj `tools/textcheck` přeloží obrazovky na PC
+  a vykreslí každou ve všech třech jazycích a všech čtyřech písmech (hodiny,
+  letadla i s detailem, meteoradar, předpověď, cena, výroba, nastavení,
+  obrazovka pro připojení k WiFi). Kde se dva texty překrývají nebo text
+  přesahuje okraj kulatého displeje, vypíše to a skončí chybou. Stejnou
+  kontrolu jde zapnout přímo v zařízení (`TEXT_CHECK` v `Config.h`), hlášení
+  jdou na sériovou linku. Při vydání nástroj nehlásí nic.
+
+### Změněno
+
+- **Heslo správce má vlastní kartu a tlačítko.** Dřív jedno pole sloužilo
+  k odemčení aktualizace, importu a resetu a zároveň se s každým Uložit
+  posílalo jako nové heslo, takže překlep při odemykání se mohl uložit jako
+  nové heslo. Teď je na záložce Systém pole *Heslo správce* jen pro tyto akce
+  a karta *Změnit heslo správce* (současné heslo, nové dvakrát) s vlastním
+  tlačítkem a vlastním koncovým bodem `POST /api/password`. Uložení nastavení
+  heslo nikdy neposílá ani nemění. Špatné heslo hlásí stránka slovy.
+- **Směr okna = směr nahoře na radaru.** Byla to dvě nastavení téhož, která si
+  mohla odporovat (a orientace se mění i tlačítky na displeji). Na webu je
+  jedno pole *Okno míří na (nahoře na radaru)*. Pokud byl výhled z okna
+  zapnutý, původní směr okna se při prvním startu převezme jako orientace
+  radaru. Klíč `windowAz` ze starší zálohy se ignoruje.
+- **Webové nastavení přehledněji:**
+  - Každé pole má vlastní popisek s jednotkou (např. „Odraz aspoň (dBZ)“
+    a „Do vzdálenosti (km)“ místo jednoho popisku nad dvěma poli).
+  - Nastavení vypnuté funkce se schovají (posun proti slunci, bouřka, výhled
+    z okna, letadlo poblíž, Home Assistant).
+  - „Meteoradar jen při bouřce“ je v kartě Meteoradar, „Letadlo poblíž“ na
+    záložce Letadla hned pod výhledem z okna.
+  - Tlačítko Uložit je jen na záložkách Poloha a Obrazovky, kde něco ukládá;
+    hlášky („Uloženo“, „Špatné heslo“) se ukazují na každé záložce.
+  - Barvy podle výšky: tři hranice vedle sebe a u každé barvy skutečný rozsah
+    („pod 2 km“, „2–6 km“ …), který se mění při psaní.
+  - Nápovědy mají jednu větu, zbytek je pod „Více“.
+  - Na telefonu nic nepřetéká (ověřeno na šířce 390 px).
+
+### Opraveno
+
+- Na obrazovce Nastavení v angličtině se „(day)“ / „(night)“ kreslilo přes
+  slovo „Brightness“ (našla kontrola kolizí).
+- Callsign letadla u okraje displeje se kreslil napůl mimo kruh; teď se
+  vynechá. Totéž platí pro popisky měst.
+- S otevřeným detailem letadla vykukovaly zpod panelu kusy callsignů; teď se
+  callsigny pod panelem nekreslí.
+
+- **Zařízení po restartu nezůstane viset na QR kódu.** Když se po startu
+  nepovedlo připojit k uložené síti, například proto, že po výpadku proudu
+  nebo restartu watchdogem ještě nenaběhl router, zařízení spustilo
+  přístupový bod a čekalo na něm bez omezení, dokud ho někdo ručně
+  nerestartoval. Teď se v takovém případě každé dvě minuty podívá, jestli je
+  některá uložená síť v dosahu, a připojí se k ní. Přístupový bod přitom
+  zůstává zapnutý, takže QR kód funguje dál. Skrytá síť se při hledání
+  neukáže, proto se zařízení navíc samo restartuje, když se na přístupový bod
+  30 minut nikdo nepřipojí. Dokud je někdo k přístupovému bodu připojený,
+  nic z toho se neděje. Při prvním spuštění bez uložené sítě se chování
+  nemění.
+
 ## [0.8.5]
 
 ### Změněno

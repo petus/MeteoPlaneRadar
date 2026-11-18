@@ -17,16 +17,19 @@ ESP32-S3-Touch-LCD-2.1 a ESP32-S3-Touch-LCD-2.8C a nastavuje se z prohlížeče.
 
 | Obrazovka | Co ukazuje | Zdroj |
 | --- | --- | --- |
-| **Hodiny** | čas, datum, počasí, vteřinový prstenec | Open-Meteo |
-| **Letadla** | letadla v okolí s ikonou podle typu, detail letu včetně trasy | adsb.fi, adsb.lol |
+| **Hodiny** | čas, datum, svátek (CZ/SK), počasí, vteřinový prstenec | Open-Meteo |
+| **Letadla** | letadla v okolí s ikonou podle typu, detail letu včetně trasy | adsb.fi, adsb.lol, adsbdb |
 | **Meteoradar** | animovaná srážková situace | ČHMÚ, ČHMÚ masked nebo RainViewer |
 | **Předpověď** | nyní, +3 h, +6 h, dnes, zítra, pozítří a další dny, ovzduší a pyl | Open-Meteo |
 | **Cena elektřiny** | spotová cena na 24hodinovém ciferníku, dnes i zítra | OTE přes spotovaelektrina.cz |
 | **Výroba ČR** | z čeho se právě vyrábí, podíl OZE, spotřeba, vývoz | ENTSO-E přes energy-charts |
+| **3D tisk** | průběh tisku na prstenci, zbývající čas, materiál, graf teplot | vaše tiskárna (PrusaLink, Moonraker) |
+| **Kurzy měn** | až 6 měn v domácí měně se změnou proti předchozímu kurzu | ČNB (pro CZK), jinak ECB |
+| **Kryptoměny** | až 6 mincí v domácí měně se změnou za 24 h | CoinGecko |
 | **Nastavení** | jas, orientace mapy, jednotky, jazyk | — |
 
-Prvních šest jde vypnout, Nastavení je dostupné vždy. Rozhraní je česky nebo
-anglicky. Písmo pro celý displej se volí na webu: vyhlazené Inter, Poppins,
+Všechny kromě Nastavení jde vypnout, Nastavení je dostupné vždy. Rozhraní je
+česky, slovensky nebo anglicky. Písmo pro celý displej se volí na webu: vyhlazené Inter, Poppins,
 Inter tenké (s diakritikou), nebo původní pixelové.
 
 Obě energetické obrazovky jsou po aktualizaci vypnuté (zapnou se ve webovém
@@ -56,28 +59,51 @@ dotykový řadič), dá se to napevno vnutit přes `BOARD_FORCE` v `Config.h`.
 2. Připojte se k otevřené síti **`MeteoPlaneRadar`** — na displeji je QR kód.
 3. Otevřete `http://192.168.4.1/`, vyberte svou WiFi a uložte.
 
-Přístupový bod zůstane aktivní, dokud síť nezadáte. Potom najdete nastavení na
+Přístupový bod zůstane aktivní, dokud síť nezadáte. Pokud už má zařízení nějakou
+síť uloženou a jen se k ní po startu nepřipojilo (třeba po výpadku proudu ještě
+nenaběhl router), každé dvě minuty se podívá, jestli je síť zpátky, a připojí se.
+Když se na přístupový bod 30 minut nikdo nepřipojí, zařízení se restartuje.
+
+Po připojení najdete nastavení na
 **`http://meteoplaneradar.local/`** nebo na IP adrese, která je vypsaná na
 obrazovce Nastavení.
 
 ## Nastavení v prohlížeči
 
 Web běží trvale. Nastavíte v něm polohu (i vyhledáním města), které obrazovky
-zobrazovat a jestli se mají střídat, zdroj meteoradaru, jazyk, denní a noční
+zobrazovat a jestli se mají střídat, zdroj meteoradaru, jazyk (čeština,
+slovenčina, English — platí pro web i displej), denní a noční
 jas, vzhled hodin, filtry letadel a upozornění na nouzové squawky. Je tam i
 dálkové ovládání (přepínání obrazovek a rozsahu bez dotyku displeje), stavová
 stránka, export a import nastavení a aktualizace firmwaru.
 
-Většina položek se **ukládá hned po změně**. Tlačítko Uložit zůstává jen pro
-polohu, výběr obrazovek a zdroj meteoradaru — ty vyžadují restart zařízení.
+Od 0.9.8 se **všechno ukládá hned po změně**, obecné tlačítko Uložit už není.
+Tři věci se projeví až po restartu zařízení: poloha, výběr obrazovek a zdroj
+meteoradaru. Po jejich změně se dole objeví pruh *Změny se projeví po restartu*
+s tlačítkem **Restartovat teď**; když ho nepoužijete, zařízení se restartuje
+samo 2 minuty po poslední takové změně (do té doby běží s původním
+nastavením a stihnete změnit víc věcí najednou). Vlastní tlačítka mají jen
+WiFi, uložené sítě, údaje tiskárny, klíč CoinGecko a heslo správce.
+
+Od 0.9.8 má **každá obrazovka svou záložku** (Hodiny, Letadla, Meteoradar,
+Energie, Tiskárna, Kurzy & Krypto) a ta je vidět jen tehdy, když je obrazovka
+zapnutá na záložce Obrazovky.
+Výjimkou jsou funkce, které fungují i s vypnutou obrazovkou: letadlo poblíž,
+meteoradar jen při bouřce a hlídání tiskárny drží svou záložku, dokud jsou
+zapnuté. Záložka Displej (dříve Vzhled) má jen věci společné pro celý displej:
+jas, noční režim, vypnutí v noci a písmo. Nastavení vypnutých funkcí se schovávají a nápovědy ukazují jednu větu,
+zbytek je pod odkazem „Více“.
 
 ### Heslo
 
 Heslo je **nepovinné a ve výchozím stavu žádné není** — aktualizace firmwaru,
 import nastavení i tovární reset jsou hned po nahrání přístupné komukoli, kdo se
-dostane na adresu zařízení. Nastavíte ho v záložce Systém: pole *Současné heslo*
-necháte poprvé prázdné a vyplníte jen *Nové heslo*. Jedna mezera v Novém hesle
-ochranu zase zruší. Uživatelské jméno na stránce `/update` je `admin`.
+dostane na adresu zařízení. Nastavíte ho v záložce Systém v kartě **Změnit heslo
+správce** vlastním tlačítkem: *Současné heslo* necháte poprvé prázdné, nové
+zadáte dvakrát. Prázdné nové heslo ochranu zase vypne. Pole **Heslo správce**
+nahoře slouží jen k odemčení importu a továrního resetu — s ukládáním nastavení
+se heslo nikdy neposílá a nikdy se jím nemění. Uživatelské jméno na stránce
+`/update` je `admin`.
 
 Heslo se **ukládá v čitelné podobě**. Aktualizační stránka používá HTTP Basic a
 knihovně se musí předat skutečné heslo, takže otisk tam použít nelze — hashovat
@@ -98,8 +124,35 @@ nastavení.
 | **BOOT při startu (~3 s)** | tovární reset |
 
 Na obrazovce Nastavení se řádkem `Nahore` volí, **který světový směr je nahoře**
-na radaru letadel — tedy směr, kterým se díváte z okna. Meteoradar se záměrně
-neotáčí.
+na radaru letadel — tedy směr, kterým se díváte z okna. Na webu je to totéž pole
+*Okno míří na (nahoře na radaru)* a od 0.8.6 ho používá i výhled z okna.
+Meteoradar se záměrně neotáčí.
+
+**Noc a vypnutý displej (0.9.2).** Noční jas se zapíná ručně, podle slunce,
+nebo podle času (záložka Displej). Displej se může ve zvoleném čase úplně
+vypnout (*Vypnutí displeje v noci*, např. 23:00 – 6:00) — zařízení běží dál,
+dotyk ho rozsvítí na 30 s a upozornění ho rozsvítí, pokud to povolíte.
+
+**Rozložení hodin (0.9.3)** si vyberete na záložce Hodiny: základní, se Sluncem
+a Měsícem, nebo s předpovědí na příští hodiny. Varianta se Sluncem a Měsícem
+(od 0.9.7) má v řádku počasí dnešní max/min, pod ním východ a západ Slunce,
+východ a západ Měsíce; ikona Měsíce v tom řádku ukazuje jeho aktuální fázi. Slunce i Měsíc platí pro polohu nastavenou na
+webu (nebo zjištěnou podle IP): časy Slunce přicházejí z předpovědi
+Open-Meteo, Měsíc se počítá přímo v zařízení. Když se řádek počasí nevejde,
+vynechá se nejdřív vítr – srážky mají přednost.
+
+**Svátek (0.9.2)** se ukazuje na hodinách nad datem: česky podle českého,
+slovensky podle slovenského kalendáře, v angličtině ne.
+
+**Trasu letadla** (odkud – kam) v detailu jde od 0.9.1 vypnout na záložce
+Letadla. Dohledává se podle callsignu a občas nesedí; vypnutá se neukazuje ani
+nedohledává.
+
+**Tečky obrazovek** nahoře mohou od 0.9.1 po přepnutí samy zmizet (záložka
+Obrazovky, *Tečky obrazovek nahoře*: vždy, nebo skrýt po 3, 5 či 10 s). Vrátí
+je dotyk, dlouhý stisk nebo přepnutí z prohlížeče. Na obrazovce Nastavení
+zůstávají, při upozornění se neukazují a v noci je nepřinese automatické
+střídání. Výchozí je *vždy zobrazené*, jako dřív.
 
 ## Meteoradar: ČHMÚ, ČHMÚ masked nebo RainViewer
 
@@ -118,24 +171,89 @@ zdrojem, protože každý má vlastní paletu.
 
 ## Střídání obrazovek: bouřka a letadlo poblíž
 
-Dvě volby na záložce Obrazovky dělají ze střídání něco chytřejšího:
+Dvě volby dělají ze střídání něco chytřejšího (meteoradar v kartě Meteoradar
+na záložce Obrazovky, letadlo na záložce Letadla):
 
 - **Meteoradar jen při bouřce** — meteoradar se do střídání přidá, jen když je
   do zadané vzdálenosti (výchozí 50 km) odraz aspoň zadané síly (výchozí
   20 dBZ). Kontroluje se každých 5 minut nejnovější snímek ČHMÚ. Po dvou
   klidných snímcích meteoradar zase vypadne. Funguje i s jinak vypnutou
   obrazovkou Meteoradar.
-- **Letadla jen když je letadlo poblíž** — obrazovka Letadla se sama nestřídá,
+- **Letadlo poblíž** — obrazovka Letadla se sama nestřídá,
   ale když se letadlo přiblíží na zadanou vzdálenost (výchozí 5 km), ukáže se
   na zadanou dobu (výchozí 15 s) i s otevřeným detailem a pak se pokračuje tam,
-  kde se skončilo. Každé letadlo jednou za 15 minut.
+  kde se skončilo. Každé letadlo jednou za 15 minut. Volba *Co ukázat*
+  (0.9.9) určuje průběh: **hned detail**, **nejdřív radar, pak detail**, nebo
+  **jen radar**. Na radaru má letadlo tyrkysový kroužek a pod hodinami je jeho
+  vzdálenost; při „nejdřív radar“ trvá radar čtvrtinu nastavené doby (nejméně
+  5 s, nejvýš 15 s, nikdy víc než polovinu) a zbytek patří detailu. V detailu
+  je od 0.9.9 i velká ikona letadla natočená podle kurzu.
 
-**Výhled z okna** (záložka Letadla): směr okna, šířka výhledu a dohled.
+**Výhled z okna** (záložka Letadla): šířka výhledu a dohled. Směr okna je směr
+nahoře na radaru (viz Ovládání).
 Letadlo ve výhledu má při upozornění přednost před bližším letadlem, které
 z okna vidět není. Výseč se zakreslí do radaru letadel.
 
 Všechny tyto limity se ukládají, přežijí restart a jsou v exportu i importu
 nastavení.
+
+## 3D tiskárna (0.9.0)
+
+> **⚠ Zatím nevyzkoušeno se skutečnou tiskárnou.** Čtení odpovídá zveřejněné
+> dokumentaci PrusaLinku a Moonrakeru. Pokud něco nesedí, pošlete prosím řádek
+> Tiskárna ze stavové stránky webu.
+
+Zařízení umí hlídat jednu 3D tiskárnu v místní síti: **Prusa** přes PrusaLink
+(MK4, MK3.9, XL, MINI, CORE One, starší MK3S s RPi) nebo **Klipper** přes
+Moonraker. Nastavuje se na záložce **Tiskárna**: typ, IP adresa (u Klipperu
+případně s portem, výchozí je 7125), u Prusy jméno a heslo z menu tiskárny
+(v nastavení sítě u PrusaLinku) nebo API klíč.
+
+Obrazovka **3D tisk** je po aktualizaci vypnutá — zapíná se na záložce
+Obrazovky. Do střídání obrazovek se zařadí jen během tisku. Ukazuje prstenec
+uplynulého a zbývajícího času, stejné údaje číslem včetně času dokončení,
+materiál ze souboru a graf teploty trysky a podložky za posledních 30 minut.
+
+Upozornění na **konec tisku, chybu a pozastavení** chodí, i když je obrazovka
+vypnutá. Displej se přepne na 3D tisk a drží upozornění, dokud se ho
+nedotknete (nejdéle 30 minut, potom zůstane barevná tečka na hodinách).
+V noci volíte noční jas s blikáním, plný jas, nebo klid bez blikání.
+
+**Heslo, jméno a API klíč si zařízení pamatuje i po restartu** (ve flash, která
+není šifrovaná). Na web se nikdy nevracejí. Do exportu a importu nastavení
+jdou jen po zaškrtnutí *Heslo a API klíč i do exportu a importu nastavení*;
+takový export pak chce heslo správce, pokud je nastavené.
+
+Tiskárně se nikdy nic neposílá, zařízení jen čte. Nedostupná tiskárna
+nezpomalí displej ani web: dotazy běží ve vlastní úloze s krátkými limity a
+když tiskárna neodpovídá, ptá se zařízení jen jednou za minutu (po hodině
+jednou za 5 minut).
+
+## Kurzy měn (0.9.6)
+
+Obrazovka **Kurzy měn** je po aktualizaci vypnutá — zapíná se na záložce
+Obrazovky, nastavuje na záložce **Kurzy & Krypto**. Ukazuje až šest měn: kolik stojí
+v domácí měně a šipkou změnu proti předchozímu kurzu.
+
+Zdroj se řídí domácí měnou. Pro **CZK** jsou to kurzy devizového trhu
+**ČNB**, pro ostatní (EUR, PLN, HUF, CHF, GBP, DKK, SEK, NOK, RON, USD)
+referenční kurzy **ECB**; kurz mezi dvěma měnami jinými než euro se přepočítá
+přes euro. Domácí měna „automaticky“ znamená: čeština → CZK, slovenština →
+EUR, angličtina → měna země vybrané u výroby elektřiny (jinak EUR).
+
+Kurz se vyhlašuje jednou za pracovní den (ČNB ~14:30, ECB ~16:00), proto se
+zařízení ptá zřídka. Domácí měna i výběr měn jsou součástí exportu a importu
+nastavení.
+
+## Kryptoměny a výpadky zdrojů (0.9.7)
+
+Obrazovka **Kryptoměny** (také vypnutá po aktualizaci) ukazuje až 6 mincí
+v téže domácí měně a změnu za 24 hodin. Zdroj je CoinGecko bez klíče, dotaz
+jednou za 10 minut; nepovinný Demo klíč se zadává na záložce Kurzy & Krypto a do
+exportu se neukládá. Miliony se píšou jako „2,05 mil.“.
+
+Když zdroj nefunguje, obrazovka bez dat napíše „Zdroj nedostupný“ a kdy
+zkusí znovu; obrazovka s daty je ukazuje dál a označí je jako stará.
 
 ## Více WiFi sítí
 
@@ -228,7 +346,7 @@ USB CDC On Boot: Enabled. Nebo `arduino-cli compile --profile default MeteoPlane
 MeteoPlaneRadar.ino   správce obrazovek, dotyk, hlavní smyčka
 Config.h              laditelné konstanty
 Settings.*            nastavení v NVS + JSON pro web
-Lang.*                české a anglické řetězce
+Lang.*                české, anglické a slovenské řetězce
 Layout.*              pásy obrazovky a hlídání kolizí
 WebConfig.* WebPage.h webový server, API, portál, OTA
 Net.*                 sdílené HTTPS stahování
@@ -236,17 +354,34 @@ Forecast.*            Open-Meteo: předpověď, slunce, ovzduší
 Energy.*              spotová cena elektřiny a mix výroby ČR
 RainViewer.*          dlaždicový radar
 StormWatch.*          hlídání bouřky ze snímku ČHMÚ (0.8.0)
+PrintWatch.* PrintParse.*  hlídání 3D tiskárny (0.9.0)
+Fx.* FxParse.*        kurzy měn ČNB / ECB (0.9.6)
+Crypto.*              kryptoměny z CoinGecko (0.9.7)
+RateTable.*           tabulka kurzů a kryptoměn (0.9.7)
+SrcHealth.h           stav zdroje dat, opakování a stáří dat (0.9.7)
+Moon.*                východ, západ a fáze Měsíce, výpočet v zařízení (0.9.7)
+NameDay.* NameDays.h  svátky na hodinách (0.9.2)
 PlaneWatch.*          hlídání letadel poblíž a výhledu z okna (0.8.0)
 PlaneIcon.*           ikony letadel podle typu (0.8.0)
 AAFont.* ClockFonts.h vyhlazené písmo hodin (0.8.0)
 Screen*.{h,cpp}       jednotlivé obrazovky
 tools/make_fonts.py   generátor ClockFonts.h z TTF/OTF
+tools/make_namedays.py  generátor NameDays.h (svátky CZ/SK, 0.9.2)
+tools/textcheck/      kontrola kolizí textu na PC (0.8.6)
+tools/printcheck/     testy čtení odpovědí tiskárny na PC (0.9.0)
 ```
 
 **Proč se prvky nepřekrývají:** obrazovka si své pásy zabere dřív, než se kreslí
 mapa. Cokoli umístěného podle dat (popisky měst, callsigny) si pak musí místo
 vyžádat, a když je zabrané, nekreslí se vůbec. Konstanty `LY_*` v `Layout.h`
-drží stejné prvky na stejných řádcích napříč obrazovkami.
+drží stejné prvky na stejných řádcích napříč obrazovkami. Od 0.8.6 si
+data-umístěný prvek nemůže zabrat ani místo za okrajem kulatého displeje.
+
+**Kontrola kolizí textu (0.8.6):** `tools/textcheck/build.sh` přeloží obrazovky
+na PC a vykreslí každou ve všech třech jazycích a všech čtyřech písmech. Kde se
+dva texty překrývají nebo text přesahuje okraj displeje, vypíše řádek
+`TEXT: ...` a skončí nenulovým kódem. Stejnou kontrolu jde zapnout i přímo
+v zařízení (`TEXT_CHECK 1` v `Config.h`), hlášení pak jdou na sériovou linku.
 
 Sériový výpis 115200 Bd přes konektor **USB**. Totéž bez kabelu je na stavové
 stránce webu.
@@ -257,16 +392,20 @@ stránce webu.
 
 Jen pro osobní nekomerční použití — respektujte podmínky poskytovatelů.
 
-**Letadla, registrace a typ:** [adsb.fi](https://adsb.fi) · **trasy:** [adsb.lol](https://adsb.lol) ·
+**Letadla, registrace a typ:** [adsb.fi](https://adsb.fi) · **trasy:** [adsb.lol](https://adsb.lol), [adsbdb](https://www.adsbdb.com) ·
 **srážky ČR:** [ČHMÚ](https://opendata.chmi.cz) ·
 **srážky svět:** [RainViewer](https://www.rainviewer.com) ·
 **počasí, ovzduší, geokódování:** [Open-Meteo](https://open-meteo.com) ·
 **ceny elektřiny:** OTE-ČR přes [spotovaelektrina.cz](https://spotovaelektrina.cz) ·
 **výroba elektřiny:** ENTSO-E přes [energy-charts](https://api.energy-charts.info) (Fraunhofer ISE) ·
+**kurzy měn:** [ČNB](https://www.cnb.cz), [ECB](https://data.ecb.europa.eu) ·
+**kryptoměny:** [Data provided by CoinGecko](https://www.coingecko.com/en/api) ·
 **poloha podle IP:** [ip-api.com](http://ip-api.com) ·
 **mapa:** hranice Natural Earth (public domain), města [GeoNames](https://www.geonames.org) (CC BY 4.0) ·
 **čas:** hlavička `Date` (bez NTP) ·
-**rozdělení ikon letadel:** [ADS-B Radar](https://adsb-radar.com/help/icons.html)
+**rozdělení ikon letadel:** [ADS-B Radar](https://adsb-radar.com/help/icons.html) ·
+**svátky:** [namedays-cs](https://github.com/OzzyCzech/namedays-cs) (Roman Ožana, MIT),
+[slovak-name-days](https://github.com/jozefgrencik/slovak-name-days) (Jozef Grenčík, MIT; oficiální kalendár MK SR)
 
 ## Přispěvatelé
 

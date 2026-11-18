@@ -27,7 +27,7 @@ across restarts.
 2. Near the bottom there are three wide buttons. Press the **middle** one,
    labelled **`Jazyk: cestina`**.
 3. It immediately becomes **`Language: English`** and the whole interface
-   follows.
+   follows. Pressing it again cycles on to Slovak (0.8.6) and back to Czech.
 
 ### In the browser
 
@@ -57,16 +57,19 @@ It is not a phone and does not try to be one.
 
 | Screen | Shows | Source |
 | --- | --- | --- |
-| **Clock** | time, date, current weather, seconds ring | Open-Meteo |
-| **Aircraft** | aircraft around you, tap for details and route | adsb.fi, adsb.lol |
+| **Clock** | time, date, name day (CZ/SK), current weather, seconds ring | Open-Meteo |
+| **Aircraft** | aircraft around you, tap for details and route | adsb.fi, adsb.lol, adsbdb |
 | **Weather radar** | animated precipitation | CHMI, CHMI masked or RainViewer |
 | **Forecast** | now, two 3-hour windows, today and six more days, air quality and pollen | Open-Meteo |
 | **Electricity price** | spot price on a quarter-hour dial, today and tomorrow | OTE via spotovaelektrina.cz |
 | **Generation** | what the grid is running on, renewable share, load, export | Energy-Charts (Fraunhofer ISE) |
+| **3D print** | print progress on a ring, time left, material, temperature graph | your printer (PrusaLink, Moonraker) |
+| **Exchange rates** | up to 6 currencies in your home currency, change against the previous fixing | CNB (for CZK), ECB otherwise |
+| **Crypto** | up to 6 coins in your home currency, change over 24 h | CoinGecko |
 | **Settings** | brightness, map orientation, units, language | — |
 
-Any of the first six can be switched off in the browser; Settings is always
-reachable.
+Any screen except Settings can be switched off in the browser; Settings is
+always reachable.
 
 Both energy screens are **off after an update** — turn them on in the browser.
 While a screen is off the device never asks for its data at all.
@@ -110,7 +113,10 @@ defaults are:
 | 6 to 10 km | Yellow | Lower cruise levels |
 | 10 km and up | Blue | Long-haul cruise |
 
-An aircraft not reporting its altitude is drawn grey, not red.
+An aircraft not reporting its altitude is drawn grey, not red. The boundaries
+and colours can be changed in the browser. The legend under the aircraft count,
+the boundaries and the altitude filter follow the units option (0.8.7): km and
+m with metric units, thousands of feet ("kft") and ft with aviation units.
 
 The **icon follows the airframe** (0.8.0), after the scheme of
 [adsb-radar.com](https://adsb-radar.com/help/icons.html): helicopters have a
@@ -119,14 +125,21 @@ The kind comes from the ICAO type code adsb.fi sends (A20N, B738, EC35...), or
 from the ADS-B emitter category when the type is unknown; anything else keeps
 the original arrow.
 
-**Aircraft nearby** (0.8.0, Screens tab): the Aircraft screen leaves the
+**Aircraft nearby** (0.8.0, Aircraft tab since 0.8.6): the Aircraft screen leaves the
 automatic cycling and instead jumps in for a set time (default 15 s) whenever an
 aircraft comes within a set distance (default 5 km) - with that aircraft's
 detail already open - then the cycling carries on where it was. Each aircraft
-is shown once per 15 minutes.
+is shown once per 15 minutes. *What to show* (0.9.9) sets the course of it: **the
+detail at once**, **the radar first, then the detail**, or **the radar only**.
+On the radar the aircraft gets a cyan ring and its distance shows under the
+clock; with the radar first, the radar takes a quarter of the time set (at
+least 5 s, at most 15 s, never more than half) and the detail the rest. Since
+0.9.9 the detail also carries a large icon of the aircraft, turned to its
+track.
 
-**Window view** (0.8.0, Aircraft tab): the bearing of your window, the width of
-the view and how far you can see. An aircraft in the view takes priority for
+**Window view** (0.8.0, Aircraft tab): the width of the view and how far you can
+see. Since 0.8.6 the window faces the bearing at the top of the radar (see Map
+orientation below) - one setting instead of two that could disagree. An aircraft in the view takes priority for
 the alert over a nearer one you cannot see from the window. The sector is drawn
 on the radar.
 
@@ -143,7 +156,8 @@ emergency or a watched aircraft.
 **Map orientation:** the `Nahore` / `Top` row in Settings sets which compass
 bearing is at the top of the screen. Set the direction you are looking out of
 the window and an aircraft seen to the left of the roof appears to the left on
-the display. Eight positions, 45° apart. The weather radar deliberately does not
+the display. Eight positions, 45° apart. In the browser it is the *Window faces
+(top of the radar)* field, and the window view uses the same bearing. The weather radar deliberately does not
 rotate — a precipitation map is read north-up.
 
 ### Weather radar
@@ -173,7 +187,7 @@ The legend switches with the source and says which one you are reading — each
 radar has its own palette, so the same yellow means 40 dBZ on one scale and 35
 on the other.
 
-**Radar only when a storm is coming** (0.8.0, Screens tab): the weather radar
+**Radar only when a storm is coming** (0.8.0, Weather radar tab): the weather radar
 joins the automatic cycling only while an echo of at least a set strength
 (default 20 dBZ) lies within a set distance (default 50 km). The newest CHMI
 frame is checked every five minutes; two clear frames in a row drop the radar
@@ -254,23 +268,45 @@ wrong on your board (a dead touch controller, most likely), `BOARD_FORCE` in
 The access point stays up until you enter a network. Without a connection the
 device has nothing to fetch and nothing to show.
 
+If a network is already remembered and the device just failed to join it at
+boot (the router was still starting after a power cut, say), it checks every
+two minutes whether the network is back and joins it. After 30 minutes with
+nobody on the access point it restarts.
+
 Afterwards the settings live at **`http://meteoplaneradar.local/`**, or at the
 IP address printed on the Settings screen.
 
 ## Configuration in a browser
 
-The web interface runs permanently and is split into seven tabs so it works on a
-phone: **Control** (switch screens and range remotely, device status),
-**Location** (manual or by searching for a town name), **Screens** (which to
-show, auto-cycling, radar source), **Appearance** (day and night brightness,
-sun-driven night mode, seconds ring, colours), **Aircraft** (filters, squawks,
-watched callsign, map orientation, units), **Energy** (price margin and VAT,
-country for the generation screen) and **System** (password, firmware update,
-settings backup, restart, factory reset, data sources).
+The web interface runs permanently, in Czech, Slovak or English, and is split
+into tabs so it works on a phone: **Control** (switch screens and range
+remotely, device status, WiFi), **Location** (manual or by searching for a town
+name), **Screens** (which to show, auto-cycling, screen dots), **Display**
+(typeface, day and night brightness, sun-driven night mode, display off at
+night), **Clock** (seconds ring, colours, layout, name days), **Aircraft**
+(filters, squawks, watched callsign, map orientation, units, altitude colours,
+window view, aircraft nearby, icon legend), **Weather radar** (source, legend,
+radar only for storms), **Energy** (price margin and VAT, country for the
+generation screen), **Printer**, **Rates & Crypto**, **Home Assistant** and
+**System** (admin password, firmware update, settings
+backup, restart, factory reset, data sources).
 
-Most settings are **saved the moment you change them**. The Save button is only
-needed for the location, the set of screens and the radar source, because those
-restart the device.
+Since 0.9.8 **everything is saved the moment you change it**; there is no
+general Save button any more. Three things take effect only after a restart:
+the location, the set of screens and the radar source. After changing one, a
+bar appears at the bottom with a **Restart now** button; if it is not used, the
+device restarts by itself 2 minutes after the last such change (until then it
+runs with the old settings, so several things can be changed in one go). Only
+WiFi, the saved networks, the printer's details, the CoinGecko key and the
+admin password have buttons of their own.
+
+Since 0.9.8 **each screen has its own tab**, shown only while the screen is
+switched on in the Screens tab. The
+exceptions are features that work with their screen off: aircraft nearby, radar
+only for storms and the printer watch keep their tab while they are on. The
+Display tab (Appearance before 0.9.8) holds only what applies to the whole
+display. Settings of a feature that is switched off are
+hidden, and each hint shows one sentence with the rest under "More".
 
 The status page reports IP, signal strength, uptime, free memory, the reason for
 the last restart and the outcome of the last fetch from each source — diagnostics
@@ -280,9 +316,12 @@ without a serial cable.
 
 The password is optional and **there is none by default**, which means firmware
 update, settings import and factory reset are open to anyone who can reach the
-device. Set one in the System tab: leave *current password* empty the first
-time and fill in *new password* only. A single space in the new password field
-removes the protection. The username on `/update` is `admin`.
+device. Set one in the System tab, in the **Change the admin password** card
+with its own button: leave *current password* empty the first time and type the
+new one twice. An empty new password removes the protection. The **Admin
+password** field at the top only unlocks import and factory reset - it is never
+sent with other settings and can never change the password. The username on `/update` is
+`admin`.
 
 The password is **stored in the clear**, because the update page uses HTTP Basic
 and the library has to be given the real password. It protects against the
@@ -303,6 +342,31 @@ startup**, which is a factory reset and also erases WiFi.
 
 Screens and range can also be changed from the browser, without touching the
 glass.
+
+Since 0.9.3 the **clock layout** can be chosen on the Clock tab: basic, with
+the Sun and the Moon, or with the next hours' forecast. The Sun and Moon
+layout (since 0.9.7) has today's high/low in the weather row, then sunrise and
+sunset, then moonrise and moonset - the Moon's icon in that row shows its
+current phase. Both are for the location set
+in the web UI (or found from the IP address): the Sun times come with the
+Open-Meteo forecast, the Moon is worked out on the device. When the weather
+row does not fit, the wind is left out first - rain comes first.
+
+Since 0.9.2 the **display can switch itself off at night** (Display tab, *Display
+off at night*, a window such as 23:00 – 6:00). A touch lights it for 30
+seconds, and alerts can light it too if you allow that. **Night brightness**
+can follow the sun, a fixed clock window, or be switched by hand. In Czech and
+Slovak the clock shows the **name day** above the date.
+
+Since 0.9.1 the **route** (from – to) in the aircraft detail can be switched
+off on the Aircraft tab. It is looked up by callsign and is sometimes wrong;
+switched off, it is neither shown nor looked up.
+
+Since 0.9.1 the **screen dots** at the top can hide themselves after a switch
+(Screens tab, *Screen dots at the top*: always, or hide after 3, 5 or 10 s). A
+touch, a long press or a switch from the browser brings them back. They stay on
+the Settings screen, are not shown with an alert, and at night the auto
+cycling does not bring them up. The default is *always shown*, as before.
 
 ---
 
@@ -325,6 +389,68 @@ room for an over-the-air update.
 by WiFiManager, which is no longer used. The device will bring up its own
 network once and you enter your WiFi again. Location, brightness and map
 orientation are kept.
+
+## 3D printer (0.9.0)
+
+> **⚠ Not tested with a real printer yet.** Parsing follows the published
+> PrusaLink and Moonraker documentation. If something does not fit, please
+> send the Printer line of the web status page.
+
+The device can watch one 3D printer on the local network: **Prusa** through
+PrusaLink (MK4, MK3.9, XL, MINI, CORE One, older MK3S with an RPi) or
+**Klipper** through Moonraker. Set it up on the **Printer** tab: type, IP
+address (for Klipper optionally with a port, 7125 by default) and for Prusa
+the user and password from the printer menu or an API key.
+
+The **3D print** screen is **off after an update** — turn it on on the Screens
+tab. It joins the rotation only while a print is running. It shows a ring of
+elapsed against remaining time, the same as numbers including the finish
+time, the material from the file and a graph of nozzle and bed temperature
+for the last 30 minutes.
+
+Alerts on **print finished, print error and print paused** work even with the
+screen off. The display switches to 3D print and holds the alert until
+touched (at most 30 minutes, then a coloured dot stays on the clock). At night
+you choose night brightness with blinking, full brightness, or calm without
+blinking.
+
+**The password, user and API key are kept across restarts** (in flash, which
+is not encrypted). They are never sent back to the browser. They go into the
+settings export and are taken from an import only when *Include the password
+and API key in the settings export and import* is ticked; such an export then
+asks for the admin password, if one is set.
+
+Nothing is ever sent to the printer; the device only reads. An unreachable
+printer does not slow the display or the web UI: requests run in a task of
+their own with short timeouts, and while the printer does not answer it is
+asked once a minute (once every 5 minutes after an hour).
+
+## Exchange rates (0.9.6)
+
+The **Exchange rates** screen is off after an update - switch it on in the
+Screens tab and set it up in the **Rates & Crypto** tab. It shows up to six currencies:
+what each costs in your home currency, with an arrow for the change against
+the previous fixing.
+
+The source follows the home currency: **CZK** uses the Czech National Bank
+fixing, every other one (EUR, PLN, HUF, CHF, GBP, DKK, SEK, NOK, RON, USD) the
+**ECB** reference rates, with a rate between two non-euro currencies worked
+out through the euro. "Automatic" home currency means Czech -> CZK, Slovak ->
+EUR, English -> the currency of the country chosen for the generation mix
+(EUR otherwise). Rates are published once per working day (CNB ~14:30, ECB
+~16:00), so the device asks rarely. The home currency and the selection are
+part of the settings export and import.
+
+## Cryptocurrencies and source outages (0.9.7)
+
+The **Crypto** screen (also off after an update) shows up to 6 coins in the
+same home currency with the change over 24 hours, from CoinGecko without a
+key, once every 10 minutes. An optional Demo key goes in the Rates & Crypto tab and is
+not exported. Millions are written as "2.05 M".
+
+When a source is down, a screen with nothing to show says "Source
+unavailable" and when it tries again; a screen with data keeps showing it and
+marks it as old.
 
 ## Several WiFi networks
 
@@ -374,7 +500,7 @@ two app slots for OTA), USB CDC On Boot: Enabled. Or
 MeteoPlaneRadar.ino   screen manager, touch, main loop
 Config.h              all tunable constants
 Settings.*            NVS settings + JSON for the web UI
-Lang.*                Czech and English strings
+Lang.*                Czech, English and Slovak strings
 Layout.*              screen bands and collision checking
 WebConfig.* WebPage.h web server, API, captive portal, OTA
 Net.*                 shared HTTPS fetching
@@ -383,17 +509,35 @@ Energy.*              spot electricity price and generation mix
 TimeZone.*            time zone from the location
 RainViewer.*          tile radar
 StormWatch.*          storm watch from the CHMI frame (0.8.0)
+PrintWatch.* PrintParse.*  3D printer watch (0.9.0)
+Fx.* FxParse.*        exchange rates, CNB / ECB (0.9.6)
+Crypto.*              cryptocurrencies from CoinGecko (0.9.7)
+RateTable.*           the rates / crypto table (0.9.7)
+SrcHealth.h           data source state, retries, data age (0.9.7)
+Moon.*                moonrise, moonset and phase, computed on the device (0.9.7)
+NameDay.* NameDays.h  name days on the clock (0.9.2)
 PlaneWatch.*          aircraft-nearby watch and window view (0.8.0)
 PlaneIcon.*           aircraft icons by type (0.8.0)
 AAFont.* ClockFonts.h anti-aliased clock typefaces (0.8.0)
 Screen*.{h,cpp}       individual screens
 tools/make_fonts.py   generates ClockFonts.h from TTF/OTF
+tools/make_namedays.py  generates NameDays.h (CZ/SK name days, 0.9.2)
+tools/textcheck/      text collision check on a PC (0.8.6)
+tools/printcheck/     printer reply parsing tests on a PC (0.9.0)
 ```
 
 **Why nothing overlaps:** each screen reserves its chrome before the map is
 drawn. Anything positioned by data — city labels, aircraft callsigns — must then
 claim its rectangle and is dropped if the space is taken. The `LY_*` constants in
-`Layout.h` keep the same elements on the same lines across screens.
+`Layout.h` keep the same elements on the same lines across screens. Since 0.8.6
+a data-positioned element cannot claim space past the rim of the round display
+either.
+
+**Text collision check (0.8.6):** `tools/textcheck/build.sh` builds the screens
+on a PC and draws each one in all three languages and all four typefaces. Where
+two texts overlap or a text runs past the edge of the display it prints a
+`TEXT: ...` line and exits non-zero. The same check can run on the device
+(`TEXT_CHECK 1` in `Config.h`); the reports then go to the serial line.
 
 Serial log at 115200 Bd over the connector marked **USB**. The same information
 is on the web status page.
@@ -408,14 +552,17 @@ these require credit** — see [LICENSE.txt](LICENSE.txt) for the details.
 | Data | Source | Note |
 | --- | --- | --- |
 | Aircraft, registration, type | [adsb.fi](https://adsb.fi) | Free, no key, personal use |
-| Route | [adsb.lol](https://adsb.lol) | Free, no key; route data by [vradarserver/standing-data](https://github.com/vradarserver/standing-data) |
+| Route | [adsb.lol](https://adsb.lol), fallback [adsbdb](https://www.adsbdb.com) (0.9.7) | Free, no key; adsb.lol route data by [vradarserver/standing-data](https://github.com/vradarserver/standing-data) |
 | Precipitation (CZ) | [CHMI](https://opendata.chmi.cz) | Attribution required |
 | Precipitation (world) | [RainViewer](https://www.rainviewer.com) | Attribution required |
 | Weather, forecast, sun, air quality, geocoding, time zone | [Open-Meteo](https://open-meteo.com) | CC BY 4.0, attribution required, free tier non-commercial |
 | Electricity price | OTE via [spotovaelektrina.cz](https://spotovaelektrina.cz) | Free, no key; no attribution asked, and no warranty of any kind given |
 | Electricity generation | [Energy-Charts.info](https://energy-charts.info), Fraunhofer ISE | CC BY 4.0, **attribution required**; 2 requests/min per IP per endpoint |
+| Exchange rates | [Czech National Bank](https://www.cnb.cz) (CZK), [European Central Bank](https://data.ecb.europa.eu) (others) | Free, no key; source credited |
+| Cryptocurrencies | [CoinGecko](https://www.coingecko.com/en/api) | Keyless public API, ~5 calls/min per IP; **attribution required** |
 | Location by IP | [ip-api.com](http://ip-api.com) | Free tier non-commercial |
 | Map | Natural Earth (public domain), [GeoNames](https://www.geonames.org) (CC BY 4.0) | Attribution required |
+| Name days (built in) | [namedays-cs](https://github.com/OzzyCzech/namedays-cs) (Roman Ožana), [slovak-name-days](https://github.com/jozefgrencik/slovak-name-days) (Jozef Grenčík, official Slovak calendar) | MIT, copyright notices kept in LICENSE.txt |
 
 The same list, with working links, is in the device itself under the **System**
 tab. That panel is not decoration: GeoNames, CHMI, RainViewer, Open-Meteo and
